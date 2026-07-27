@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const FIELD_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-zinc-100 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:disabled:bg-zinc-800";
@@ -20,6 +20,14 @@ export default function VisitRecordForm({
   const [result, setResult] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const resultRef = useRef<HTMLElement>(null);
+
+  // メモ欄が画面を占めるので、生成開始後に本文が見える位置まで送る。
+  // 出力欄が描画されてからでないとスクロールできないため、コミット後に実行する。
+  useEffect(() => {
+    if (!isGenerating) return;
+    resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [isGenerating]);
 
   // コピー完了の表示は少し置いてから元に戻す
   useEffect(() => {
@@ -46,16 +54,49 @@ export default function VisitRecordForm({
         body: JSON.stringify({ visitDate, displayName, note }),
       });
 
-      const data: { text?: string; error?: string } = await response
-        .json()
-        .catch(() => ({}));
-
-      if (!response.ok || !data.text) {
+      // 生成が始まる前の失敗は、通常の JSON エラーとして返る
+      if (!response.ok || !response.body) {
+        const data: { error?: string } = await response.json().catch(() => ({}));
         setErrorMessage(data.error ?? "第5表の作成に失敗しました。");
         return;
       }
 
-      setResult(data.text);
+      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffer = "";
+      let text = "";
+
+      // NDJSON を1行ずつ読み、delta が届くたびに画面へ流し込む
+      const consumeLine = (line: string) => {
+        if (line.trim() === "") return;
+        let parsed: { type?: string; text?: string; message?: string };
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          return; // 壊れた行は捨てる
+        }
+        if (parsed.type === "delta" && parsed.text) {
+          text += parsed.text;
+          setResult(text);
+        } else if (parsed.type === "error") {
+          setErrorMessage(parsed.message ?? "第5表の作成に失敗しました。");
+        }
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += value;
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? ""; // 最後の要素は未完成の行
+        for (const line of lines) consumeLine(line);
+      }
+      consumeLine(buffer);
+
+      if (text === "") {
+        setErrorMessage((current) =>
+          current === "" ? "AIから本文が返りませんでした。もう一度お試しください。" : current,
+        );
+      }
     } catch {
       setErrorMessage("通信に失敗しました。電波状況をご確認ください。");
     } finally {
@@ -137,8 +178,8 @@ export default function VisitRecordForm({
         </p>
       )}
 
-      {result !== "" && (
-        <section className="flex flex-col gap-3">
+      {(result !== "" || isGenerating) && (
+        <section ref={resultRef} className="flex flex-col gap-3 scroll-mt-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
               第5表（居宅介護支援経過）
@@ -146,8 +187,8 @@ export default function VisitRecordForm({
             <button
               type="button"
               onClick={handleCopy}
-              aria-live="polite"
-              className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              disabled={isGenerating || result === ""}
+              className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                 copied
                   ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
                   : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
@@ -156,14 +197,32 @@ export default function VisitRecordForm({
               {copied ? "☑ コピーしました" : "📋 コピー"}
             </button>
           </div>
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-            <p className="text-base leading-relaxed whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">
-              {result}
-            </p>
+          <div
+            aria-live="polite"
+            aria-busy={isGenerating}
+            className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            {result === "" ? (
+              <p className="text-base text-zinc-500 dark:text-zinc-400">
+                🤖 考えをまとめています...
+              </p>
+            ) : (
+              <p className="text-base leading-relaxed whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">
+                {result}
+                {isGenerating && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[0.2em] animate-pulse bg-teal-600 dark:bg-teal-400"
+                  />
+                )}
+              </p>
+            )}
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            AIが生成した下書きです。記録として使う前に必ず内容をご確認ください。
-          </p>
+          {!isGenerating && result !== "" && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              AIが生成した下書きです。記録として使う前に必ず内容をご確認ください。
+            </p>
+          )}
         </section>
       )}
 
