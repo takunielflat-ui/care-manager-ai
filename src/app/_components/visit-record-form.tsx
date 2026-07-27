@@ -51,7 +51,7 @@ export default function VisitRecordForm({
           type="text"
           required
           autoComplete="off"
-          placeholder="例：山田 T さん"
+          placeholder="A様"
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
           className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
@@ -72,21 +72,24 @@ export default function VisitRecordForm({
           id="note"
           name="note"
           required
-          rows={12}
+          rows={16}
           placeholder="訪問時の様子、本人・家族の発言、気づいたことなどを自由に入力してください。"
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          className="w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base leading-relaxed text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className="min-h-[55vh] w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base leading-relaxed text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 sm:min-h-[24rem] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
         />
       </div>
 
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="w-full rounded-lg bg-teal-700 px-4 py-4 text-base font-semibold text-white transition-colors hover:bg-teal-800 active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
-      >
-        AIで第5表作成
-      </button>
+      {/* メモ欄が長いので、ボタンは常に親指の届く画面下端に留めておく */}
+      <div className="sticky bottom-0 -mx-4 -mb-6 border-t border-zinc-200 bg-zinc-50/80 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-black/80">
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="w-full rounded-xl bg-teal-700 px-4 py-5 text-lg font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:scale-[0.99] active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+        >
+          ✨ 第5表を作成
+        </button>
+      </div>
     </form>
   );
 }
