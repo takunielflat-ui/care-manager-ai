@@ -1,42 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+import {
+  buildFifthSheetUserMessage,
+  FIFTH_SHEET_SYSTEM_PROMPT,
+} from "@/prompts/fifthSheetPrompt";
+
 const client = new Anthropic();
-
-const SYSTEM_PROMPT = `あなたは経験豊富な介護支援専門員（ケアマネジャー）です。
-訪問時の走り書きメモを、居宅介護支援経過（第5表）にそのまま転記できる文章へ整えてください。
-
-## 出力形式
-次の見出しを、この順番で、すべて出力する。プレーンテキストのみ。
-Markdown記号（#, *, -, \`）、箇条書き記号、絵文字は一切使わない。
-
-【訪問日】
-【利用者】
-【内容】
-【所見・アセスメント】
-【対応・今後の方針】
-【要確認事項】
-
-各見出しの直後に改行し、本文を書く。該当する情報がない見出しには「特記事項なし」とだけ書く。
-
-## 各項目の書き方
-【訪問日】渡された日付をそのまま記載する。メモに時刻があれば併記する。
-【利用者】渡された表示名を記載する。メモに同席者があれば「（長女同席）」のように括弧書きで添える。
-【内容】訪問中に観察した事実と、やり取りを時系列で記載する。ここが記録の本体であり、最も詳しく書く。
-【所見・アセスメント】【内容】に書いた事実から読み取れる専門的評価を記載する。生活課題とリスクの所在を示す。
-【対応・今後の方針】実施した対応と、次に行う具体的な行動を記載する。
-【要確認事項】次回訪問や関係機関への照会で確認すべき不足情報を、短い文で列挙する。
-
-## 記載のルール
-1. である調で書く。簡潔かつ客観的な事実記録とする。
-2. メモにない事実を推測で補ってはならない。不足情報は【要確認事項】に回し、他の項目には書かない。
-3. 本人・家族の発言は「」で囲み、原文の言い回しをできるだけ残す。
-4. 発言や訴えは誰のものか必ず明示する（本人、長女、など）。メモにない続柄や氏名を創作しない。
-5. 日時・回数・サービス名・薬剤名・数値は、メモの表記どおり正確に転記する。
-6. 診断や医学的断定はしない。「〜と考えられる」「〜がうかがえる」など、ケアマネジャーの職域に収まる表現を用いる。
-7. 「良い」「悪い」「問題あり」などの主観的評価語は使わず、観察された事実で表現する。
-8. メモの誤字・略語・話し言葉は、意味を変えない範囲で整える。判断できない略語はそのまま残す。
-9. 渡された表示名以外の個人が特定される情報は出力しない。
-10. 原文にない情報で水増ししない。メモが短ければ出力も短くてよい。`;
 
 type ClientPayload = {
   visitDate?: string;
@@ -112,17 +81,23 @@ export async function POST(request: Request) {
             model: "claude-opus-5",
             max_tokens: 16000,
             output_config: { effort: "medium" },
-            system: SYSTEM_PROMPT,
+            // システムプロンプトはリクエスト間で不変なのでキャッシュさせる。
+            // 2回目以降は前置き処理が短くなり、初動が早くなる。
+            system: [
+              {
+                type: "text",
+                text: FIFTH_SHEET_SYSTEM_PROMPT,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
             messages: [
               {
                 role: "user",
-                content: `以下の訪問記録を第5表の形式に整えてください。
-
-訪問日: ${visitDate}
-利用者表示名: ${displayName}
-
-訪問メモ:
-${note}`,
+                content: buildFifthSheetUserMessage({
+                  visitDate,
+                  displayName,
+                  note,
+                }),
               },
             ],
           },
@@ -139,6 +114,14 @@ ${note}`,
         }
 
         const final = await messageStream.finalMessage();
+
+        // キャッシュが効いているかを運用中に確認できるようにする（本文は出さない）
+        const { usage } = final;
+        console.log(
+          `[generate] in=${usage.input_tokens} out=${usage.output_tokens} ` +
+            `cacheWrite=${usage.cache_creation_input_tokens ?? 0} ` +
+            `cacheRead=${usage.cache_read_input_tokens ?? 0} stop=${final.stop_reason}`,
+        );
 
         if (final.stop_reason === "refusal") {
           send({
