@@ -2,7 +2,15 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Copy the env template and set your Anthropic API key — the "第5表を作成" button
+calls `/api/generate`, which needs it:
+
+```bash
+cp .env.example .env.local
+# then edit .env.local and paste your key
+```
+
+Then, run the development server:
 
 ```bash
 npm run dev

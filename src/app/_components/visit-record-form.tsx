@@ -1,6 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+const FIELD_CLASS =
+  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-zinc-100 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:disabled:bg-zinc-800";
+
+const LABEL_CLASS = "text-sm font-medium text-zinc-700 dark:text-zinc-300";
 
 export default function VisitRecordForm({
   defaultVisitDate,
@@ -11,20 +16,66 @@ export default function VisitRecordForm({
   const [displayName, setDisplayName] = useState("");
   const [note, setNote] = useState("");
 
-  const canSubmit = visitDate !== "" && displayName.trim() !== "" && note.trim() !== "";
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [result, setResult] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  // コピー完了の表示は少し置いてから元に戻す
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const canSubmit = note.trim() !== "" && !isGenerating;
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // TODO: AI 連携（第5表生成）と Supabase 保存をここに繋ぐ
+    if (isGenerating) return;
+
+    setIsGenerating(true);
+    setErrorMessage("");
+    setResult("");
+    setCopied(false);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitDate, displayName, note }),
+      });
+
+      const data: { text?: string; error?: string } = await response
+        .json()
+        .catch(() => ({}));
+
+      if (!response.ok || !data.text) {
+        setErrorMessage(data.error ?? "第5表の作成に失敗しました。");
+        return;
+      }
+
+      setResult(data.text);
+    } catch {
+      setErrorMessage("通信に失敗しました。電波状況をご確認ください。");
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(result);
+      setCopied(true);
+    } catch {
+      setErrorMessage("コピーできませんでした。手動で選択してコピーしてください。");
+    }
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <label
-          htmlFor="visit-date"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
+        <label htmlFor="visit-date" className={LABEL_CLASS}>
           訪問日
         </label>
         <input
@@ -32,17 +83,15 @@ export default function VisitRecordForm({
           name="visit_date"
           type="date"
           required
+          disabled={isGenerating}
           value={visitDate}
           onChange={(event) => setVisitDate(event.target.value)}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className={FIELD_CLASS}
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <label
-          htmlFor="display-name"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
+        <label htmlFor="display-name" className={LABEL_CLASS}>
           利用者表示名
         </label>
         <input
@@ -52,9 +101,10 @@ export default function VisitRecordForm({
           required
           autoComplete="off"
           placeholder="A様"
+          disabled={isGenerating}
           value={displayName}
           onChange={(event) => setDisplayName(event.target.value)}
-          className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className={FIELD_CLASS}
         />
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           個人が特定されない表示名を入力してください。
@@ -62,10 +112,7 @@ export default function VisitRecordForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <label
-          htmlFor="note"
-          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
-        >
+        <label htmlFor="note" className={LABEL_CLASS}>
           訪問メモ
         </label>
         <textarea
@@ -74,20 +121,71 @@ export default function VisitRecordForm({
           required
           rows={16}
           placeholder="訪問時の様子、本人・家族の発言、気づいたことなどを自由に入力してください。"
+          disabled={isGenerating}
           value={note}
           onChange={(event) => setNote(event.target.value)}
-          className="min-h-[55vh] w-full resize-y rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base leading-relaxed text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 sm:min-h-[24rem] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          className={`${FIELD_CLASS} min-h-[55vh] resize-y leading-relaxed sm:min-h-[24rem]`}
         />
       </div>
+
+      {errorMessage !== "" && (
+        <p
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+        >
+          {errorMessage}
+        </p>
+      )}
+
+      {result !== "" && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              第5表（居宅介護支援経過）
+            </h2>
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-live="polite"
+              className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                copied
+                  ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
+                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {copied ? "☑ コピーしました" : "📋 コピー"}
+            </button>
+          </div>
+          <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <p className="text-base leading-relaxed whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">
+              {result}
+            </p>
+          </div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            AIが生成した下書きです。記録として使う前に必ず内容をご確認ください。
+          </p>
+        </section>
+      )}
 
       {/* メモ欄が長いので、ボタンは常に親指の届く画面下端に留めておく */}
       <div className="sticky bottom-0 -mx-4 -mb-6 border-t border-zinc-200 bg-zinc-50/80 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-black/80">
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full rounded-xl bg-teal-700 px-4 py-5 text-lg font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:scale-[0.99] active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+          aria-busy={isGenerating}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-5 text-lg font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:scale-[0.99] active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
         >
-          ✨ 第5表を作成
+          {isGenerating ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
+              />
+              🤖 AIが作成中...
+            </>
+          ) : (
+            "✨ 第5表を作成"
+          )}
         </button>
       </div>
     </form>
