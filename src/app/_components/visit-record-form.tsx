@@ -182,7 +182,7 @@ export default function VisitRecordForm({
           className={FIELD_CLASS}
         />
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          個人が特定されない表示名を入力してください。
+          実名で入力して構いません。AIへの送信時は自動的に匿名化されます。
         </p>
       </div>
 

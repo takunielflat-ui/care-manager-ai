@@ -44,6 +44,12 @@ export default async function Home() {
               >
                 記録一覧
               </Link>
+              <Link
+                href="/settings"
+                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+              >
+                辞書設定
+              </Link>
               <LogoutButton />
             </div>
           </div>

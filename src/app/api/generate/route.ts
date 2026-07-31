@@ -5,6 +5,7 @@ import {
   FIFTH_SHEET_SYSTEM_PROMPT,
 } from "@/prompts/fifthSheetPrompt";
 import { createClient } from "@/lib/supabase/server";
+import { anonymizeForAI, EMPTY_KNOWN_NAMES, type Category, type KnownNames } from "@/lib/anonymize";
 
 const client = new Anthropic();
 
@@ -69,6 +70,25 @@ export async function POST(request: Request) {
     );
   }
 
+  // ユーザーごとの匿名化辞書（語尾のない固有名詞）を取得する。RLSにより自分の分だけ返る。
+  const { data: knownNameRows, error: knownNamesError } = await supabase
+    .from("known_names")
+    .select("category, name");
+
+  if (knownNamesError) {
+    console.error("Failed to fetch known_names:", knownNamesError);
+  }
+
+  const knownNames: KnownNames = knownNameRows
+    ? knownNameRows.reduce((acc, row) => {
+        acc[row.category as Category].push(row.name);
+        return acc;
+      }, structuredClone(EMPTY_KNOWN_NAMES))
+    : EMPTY_KNOWN_NAMES;
+
+  // AIには実名を渡さない。保存・表示用の displayName/note はここでは書き換えない。
+  const anonymized = anonymizeForAI({ displayName, note }, knownNames);
+
   const encoder = new TextEncoder();
 
   // NDJSON で流す。ヘッダ送出後はステータスを変えられないため、
@@ -105,8 +125,8 @@ export async function POST(request: Request) {
                 role: "user",
                 content: buildFifthSheetUserMessage({
                   visitDate,
-                  displayName,
-                  note,
+                  displayName: anonymized.displayName,
+                  note: anonymized.note,
                 }),
               },
             ],
