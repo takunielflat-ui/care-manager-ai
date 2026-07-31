@@ -4,6 +4,7 @@ import {
   buildFifthSheetUserMessage,
   FIFTH_SHEET_SYSTEM_PROMPT,
 } from "@/prompts/fifthSheetPrompt";
+import { createClient } from "@/lib/supabase/server";
 
 const client = new Anthropic();
 
@@ -33,6 +34,15 @@ function toUserMessage(error: unknown) {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
+  }
+
   let body: ClientPayload;
 
   try {

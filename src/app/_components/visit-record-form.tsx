@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 const FIELD_CLASS =
@@ -20,6 +21,9 @@ export default function VisitRecordForm({
   const [result, setResult] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedRecordId, setSavedRecordId] = useState<string | null>(null);
+  const [saveErrorMessage, setSaveErrorMessage] = useState("");
   const resultRef = useRef<HTMLElement>(null);
 
   // メモ欄が画面を占めるので、生成開始後に本文が見える位置まで送る。
@@ -46,6 +50,8 @@ export default function VisitRecordForm({
     setErrorMessage("");
     setResult("");
     setCopied(false);
+    setSavedRecordId(null);
+    setSaveErrorMessage("");
 
     try {
       const response = await fetch("/api/generate", {
@@ -110,6 +116,34 @@ export default function VisitRecordForm({
       setCopied(true);
     } catch {
       setErrorMessage("コピーできませんでした。手動で選択してコピーしてください。");
+    }
+  }
+
+  async function handleSave() {
+    if (isSaving || savedRecordId) return;
+
+    setIsSaving(true);
+    setSaveErrorMessage("");
+
+    try {
+      const response = await fetch("/api/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitDate, displayName, note, generatedText: result }),
+      });
+
+      const data: { id?: string; error?: string } = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.id) {
+        setSaveErrorMessage(data.error ?? "記録の保存に失敗しました。");
+        return;
+      }
+
+      setSavedRecordId(data.id);
+    } catch {
+      setSaveErrorMessage("通信に失敗しました。電波状況をご確認の上もう一度お試しください。");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -180,23 +214,55 @@ export default function VisitRecordForm({
 
       {(result !== "" || isGenerating) && (
         <section ref={resultRef} className="flex flex-col gap-3 scroll-mt-4">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
               第5表（居宅介護支援経過）
             </h2>
-            <button
-              type="button"
-              onClick={handleCopy}
-              disabled={isGenerating || result === ""}
-              className={`shrink-0 rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                copied
-                  ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              }`}
-            >
-              {copied ? "☑ コピーしました" : "📋 コピー"}
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isGenerating || isSaving || result === "" || savedRecordId !== null}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
+                  savedRecordId !== null
+                    ? "border-teal-600 bg-teal-50 text-teal-800 opacity-100 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {savedRecordId !== null ? "✅ 保存しました" : isSaving ? "保存中..." : "💾 保存"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={isGenerating || result === ""}
+                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  copied
+                    ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
+                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                }`}
+              >
+                {copied ? "☑ コピーしました" : "📋 コピー"}
+              </button>
+            </div>
           </div>
+
+          {saveErrorMessage !== "" && (
+            <p
+              role="alert"
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+            >
+              {saveErrorMessage}
+            </p>
+          )}
+
+          {savedRecordId !== null && (
+            <p className="text-sm text-teal-700 dark:text-teal-400">
+              記録を保存しました。
+              <Link href="/records" className="ml-1 underline-offset-2 hover:underline">
+                記録一覧を見る →
+              </Link>
+            </p>
+          )}
           <div
             aria-live="polite"
             aria-busy={isGenerating}

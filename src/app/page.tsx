@@ -1,3 +1,7 @@
+import Link from "next/link";
+
+import { createClient } from "@/lib/supabase/server";
+import LogoutButton from "./_components/logout-button";
 import VisitRecordForm from "./_components/visit-record-form";
 
 // 訪問日の初期値にリクエスト時点の日付を使うため、ビルド時のプリレンダリングを避ける。
@@ -21,11 +25,28 @@ function todayInJapan() {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
       <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="mx-auto w-full max-w-xl">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{user?.email}</p>
+            <div className="flex shrink-0 items-center gap-4">
+              <Link
+                href="/records"
+                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+              >
+                記録一覧
+              </Link>
+              <LogoutButton />
+            </div>
+          </div>
           <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             訪問記録の入力
           </h1>

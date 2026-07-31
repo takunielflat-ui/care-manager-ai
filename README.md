@@ -10,6 +10,19 @@ cp .env.example .env.local
 # then edit .env.local and paste your key
 ```
 
+### Supabaseのセットアップ（ログイン・記録保存に必要）
+
+1. [Supabase](https://supabase.com) でプロジェクトを作成する。
+2. Dashboard の SQL Editor で `supabase/schema.sql` の内容を実行する
+   （`visit_records` テーブル・RLSポリシー・`updated_at` トリガーが作成される）。
+3. Authentication > Sign In / Providers で **Email** を有効にする
+   （パスワードは使わないので、そのままでよい）。
+4. Authentication > Email Templates の「Magic Link」テンプレートを開き、
+   本文に `{{ .Token }}` を含める。これがないとメールに6桁コードが載らず、
+   ログイン画面のOTP入力が使えない。
+5. Project Settings > API から `Project URL` と `anon public` キーを取得し、
+   `.env.local` の `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` に設定する。
+
 Then, run the development server:
 
 ```bash
