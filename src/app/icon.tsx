@@ -13,33 +13,21 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "linear-gradient(135deg, #6366F1 0%, #0EA5E9 100%)",
+          background: "linear-gradient(160deg, #0F766E 0%, #115E59 100%)",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "55%",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 100%)",
-          }}
-        />
-        <svg width="272" height="272" viewBox="0 0 24 24" fill="none">
-          <rect x="4" y="2.5" width="16" height="19" rx="3" fill="white" fillOpacity="0.97" />
-          <rect x="8" y="1" width="8" height="4" rx="1.5" fill="white" />
+        <svg width="280" height="280" viewBox="0 0 24 24" fill="none">
           <path
-            d="M8 12.5l2.6 2.6L16 9.6"
-            stroke="#0891B2"
-            strokeWidth="2.1"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            d="M4 5.5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H10l-4.5 4v-4H6a2 2 0 0 1-2-2z"
+            fill="white"
+          />
+          <path
+            d="M9 13.2V11l6-6 2.2 2.2-6 6H9z"
+            fill="#0F766E"
           />
         </svg>
       </div>
     ),
-    { ...size }
+    { ...size },
   );
 }
