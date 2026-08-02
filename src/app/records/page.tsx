@@ -30,7 +30,15 @@ export default async function RecordsPage() {
             >
               ← 新しい記録を作成
             </Link>
-            <LogoutButton />
+            <div className="flex shrink-0 items-center gap-4">
+              <Link
+                href="/help"
+                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+              >
+                使い方
+              </Link>
+              <LogoutButton />
+            </div>
           </div>
           <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             記録一覧

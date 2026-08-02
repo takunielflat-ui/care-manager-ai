@@ -48,6 +48,10 @@ create policy "update own records"
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
+create policy "delete own records"
+  on public.visit_records for delete
+  using (auth.uid() = user_id);
+
 -- care-manager-ai: known_names テーブルとRLSポリシー
 -- AI送信時の匿名化（src/lib/anonymize.ts）で使う、語尾のない固有名詞の辞書。
 -- 既に visit_records を作成済みの場合は、この部分だけを追加実行すればよい。

@@ -50,6 +50,12 @@ export default async function Home() {
               >
                 辞書設定
               </Link>
+              <Link
+                href="/help"
+                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+              >
+                使い方
+              </Link>
               <LogoutButton />
             </div>
           </div>

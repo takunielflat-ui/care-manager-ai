@@ -15,6 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "第5表作成 | Care Manager AI",
   description: "訪問記録から第5表（居宅介護支援経過）を作成します。",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ケアマネAI",
+  },
 };
 
 export const viewport: Viewport = {

@@ -8,6 +8,8 @@ const FIELD_CLASS =
 
 const LABEL_CLASS = "text-sm font-medium text-zinc-700 dark:text-zinc-300";
 
+const DRAFT_KEY = "care-manager-ai:visit-record-draft";
+
 export default function VisitRecordForm({
   defaultVisitDate,
 }: {
@@ -16,6 +18,7 @@ export default function VisitRecordForm({
   const [visitDate, setVisitDate] = useState(defaultVisitDate);
   const [displayName, setDisplayName] = useState("");
   const [note, setNote] = useState("");
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
@@ -25,6 +28,36 @@ export default function VisitRecordForm({
   const [savedRecordId, setSavedRecordId] = useState<string | null>(null);
   const [saveErrorMessage, setSaveErrorMessage] = useState("");
   const resultRef = useRef<HTMLElement>(null);
+
+  // ブラウザが閉じても入力内容が消えないよう、下書きをlocalStorageに保存・復元する。
+  // 復元前の空の状態で上書き保存してしまわないよう、復元完了後にのみ保存effectを動かす。
+  // サーバー側にはlocalStorageが無いため、マウント後にのみ読み込める（＝effectでの復元が必須）。
+  /* eslint-disable react-hooks/set-state-in-effect -- localStorageからのマウント時復元は例外的に許容される用途 */
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft: Partial<{ visitDate: string; displayName: string; note: string }> =
+          JSON.parse(raw);
+        if (typeof draft.visitDate === "string") setVisitDate(draft.visitDate);
+        if (typeof draft.displayName === "string") setDisplayName(draft.displayName);
+        if (typeof draft.note === "string") setNote(draft.note);
+      }
+    } catch {
+      // 壊れた下書きは無視する
+    }
+    setIsDraftLoaded(true);
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (!isDraftLoaded) return;
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ visitDate, displayName, note }));
+    } catch {
+      // 保存できなくても入力自体には影響しないので無視する
+    }
+  }, [isDraftLoaded, visitDate, displayName, note]);
 
   // メモ欄が画面を占めるので、生成開始後に本文が見える位置まで送る。
   // 出力欄が描画されてからでないとスクロールできないため、コミット後に実行する。
