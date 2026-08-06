@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 const FIELD_CLASS =
@@ -18,22 +17,52 @@ export default function VisitRecordForm({
   const [visitDate, setVisitDate] = useState(defaultVisitDate);
   const [displayName, setDisplayName] = useState("");
   const [note, setNote] = useState("");
-  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
+  const [draftAvailable, setDraftAvailable] = useState(false);
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [copied, setCopied] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [savedRecordId, setSavedRecordId] = useState<string | null>(null);
   const [saveErrorMessage, setSaveErrorMessage] = useState("");
+  const [showSavedToast, setShowSavedToast] = useState(false);
   const resultRef = useRef<HTMLElement>(null);
 
-  // ブラウザが閉じても入力内容が消えないよう、下書きをlocalStorageに保存・復元する。
-  // 復元前の空の状態で上書き保存してしまわないよう、復元完了後にのみ保存effectを動かす。
-  // サーバー側にはlocalStorageが無いため、マウント後にのみ読み込める（＝effectでの復元が必須）。
-  /* eslint-disable react-hooks/set-state-in-effect -- localStorageからのマウント時復元は例外的に許容される用途 */
+  // 画面は常に空の状態で開く。下書きは自動では読み込まず、存在を検知するだけにする
+  // （読み込むかどうかは「前回の下書きを復元」リンク経由でユーザーに選んでもらう）。
+  /* eslint-disable react-hooks/set-state-in-effect -- localStorageの存在確認はマウント時にのみ行える */
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const draft: Partial<{ visitDate: string; displayName: string; note: string }> =
+          JSON.parse(raw);
+        const hasDraftContent =
+          (typeof draft.displayName === "string" && draft.displayName.trim() !== "") ||
+          (typeof draft.note === "string" && draft.note.trim() !== "") ||
+          (typeof draft.visitDate === "string" && draft.visitDate !== defaultVisitDate);
+        if (hasDraftContent) setDraftAvailable(true);
+      }
+    } catch {
+      // 壊れた下書きは無視する
+    }
+  }, [defaultVisitDate]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // 入力中は従来どおり自動保存する。ただしマウント直後の空の状態で
+  // 既存の下書きを上書き消去してしまわないよう、何か入力がある場合のみ保存する。
+  const hasDraftableContent =
+    displayName.trim() !== "" || note.trim() !== "" || visitDate !== defaultVisitDate;
+  useEffect(() => {
+    if (!hasDraftableContent) return;
+    try {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ visitDate, displayName, note }));
+    } catch {
+      // 保存できなくても入力自体には影響しないので無視する
+    }
+  }, [hasDraftableContent, visitDate, displayName, note]);
+
+  function handleRestoreDraft() {
     try {
       const raw = window.localStorage.getItem(DRAFT_KEY);
       if (raw) {
@@ -46,18 +75,8 @@ export default function VisitRecordForm({
     } catch {
       // 壊れた下書きは無視する
     }
-    setIsDraftLoaded(true);
-  }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
-
-  useEffect(() => {
-    if (!isDraftLoaded) return;
-    try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ visitDate, displayName, note }));
-    } catch {
-      // 保存できなくても入力自体には影響しないので無視する
-    }
-  }, [isDraftLoaded, visitDate, displayName, note]);
+    setDraftAvailable(false);
+  }
 
   // メモ欄が画面を占めるので、生成開始後に本文が見える位置まで送る。
   // 出力欄が描画されてからでないとスクロールできないため、コミット後に実行する。
@@ -73,6 +92,13 @@ export default function VisitRecordForm({
     return () => clearTimeout(timer);
   }, [copied]);
 
+  // 保存完了トーストは1.5秒だけ表示する
+  useEffect(() => {
+    if (!showSavedToast) return;
+    const timer = setTimeout(() => setShowSavedToast(false), 1500);
+    return () => clearTimeout(timer);
+  }, [showSavedToast]);
+
   const canSubmit = note.trim() !== "" && !isGenerating;
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -83,7 +109,6 @@ export default function VisitRecordForm({
     setErrorMessage("");
     setResult("");
     setCopied(false);
-    setSavedRecordId(null);
     setSaveErrorMessage("");
 
     try {
@@ -153,7 +178,7 @@ export default function VisitRecordForm({
   }
 
   async function handleSave() {
-    if (isSaving || savedRecordId) return;
+    if (isSaving) return;
 
     setIsSaving(true);
     setSaveErrorMessage("");
@@ -172,7 +197,20 @@ export default function VisitRecordForm({
         return;
       }
 
-      setSavedRecordId(data.id);
+      try {
+        window.localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        // 削除できなくても保存自体は成功しているので無視する
+      }
+
+      // 一覧へは遷移せず、この画面のままフォームを空に戻して次の入力に備える
+      setVisitDate(defaultVisitDate);
+      setDisplayName("");
+      setNote("");
+      setResult("");
+      setCopied(false);
+      setDraftAvailable(false);
+      setShowSavedToast(true);
     } catch {
       setSaveErrorMessage("通信に失敗しました。電波状況をご確認の上もう一度お試しください。");
     } finally {
@@ -182,6 +220,26 @@ export default function VisitRecordForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+      {showSavedToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-0 top-4 z-50 mx-auto w-fit rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          ✅ 保存しました
+        </div>
+      )}
+
+      {draftAvailable && !hasDraftableContent && (
+        <button
+          type="button"
+          onClick={handleRestoreDraft}
+          className="self-start text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+        >
+          前回の下書きを復元
+        </button>
+      )}
+
       <div className="flex flex-col gap-2">
         <label htmlFor="visit-date" className={LABEL_CLASS}>
           訪問日
@@ -255,14 +313,10 @@ export default function VisitRecordForm({
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={isGenerating || isSaving || result === "" || savedRecordId !== null}
-                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
-                  savedRecordId !== null
-                    ? "border-teal-600 bg-teal-50 text-teal-800 opacity-100 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
-                    : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                }`}
+                disabled={isGenerating || isSaving || result === ""}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
-                {savedRecordId !== null ? "✅ 保存しました" : isSaving ? "保存中..." : "💾 保存"}
+                {isSaving ? "保存中..." : "💾 保存"}
               </button>
               <button
                 type="button"
@@ -288,14 +342,6 @@ export default function VisitRecordForm({
             </p>
           )}
 
-          {savedRecordId !== null && (
-            <p className="text-sm text-teal-700 dark:text-teal-400">
-              記録を保存しました。
-              <Link href="/records" className="ml-1 underline-offset-2 hover:underline">
-                記録一覧を見る →
-              </Link>
-            </p>
-          )}
           <div
             aria-live="polite"
             aria-busy={isGenerating}
