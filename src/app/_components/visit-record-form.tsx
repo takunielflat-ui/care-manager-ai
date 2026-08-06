@@ -51,15 +51,20 @@ export default function VisitRecordForm({
 
   // 入力中は従来どおり自動保存する。ただしマウント直後の空の状態で
   // 既存の下書きを上書き消去してしまわないよう、何か入力がある場合のみ保存する。
+  // localStorageへの書き込みはキー入力のたびに行うと重いため、入力が
+  // 500ms止まってからまとめて書き込む（デバウンス）。
   const hasDraftableContent =
     displayName.trim() !== "" || note.trim() !== "" || visitDate !== defaultVisitDate;
   useEffect(() => {
     if (!hasDraftableContent) return;
-    try {
-      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ visitDate, displayName, note }));
-    } catch {
-      // 保存できなくても入力自体には影響しないので無視する
-    }
+    const timer = setTimeout(() => {
+      try {
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ visitDate, displayName, note }));
+      } catch {
+        // 保存できなくても入力自体には影響しないので無視する
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [hasDraftableContent, visitDate, displayName, note]);
 
   function handleRestoreDraft() {

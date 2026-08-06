@@ -9,20 +9,21 @@ type CreateRecordPayload = {
 
 export async function POST(request: Request) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+
+  // 認証確認とボディのパースは互いに依存しないので、並行に行って保存の体感速度を上げる。
+  const [{ data: { user } }, parsedBody] = await Promise.all([
+    supabase.auth.getUser(),
+    request.json().catch(() => null),
+  ]);
 
   if (!user) {
     return Response.json({ error: "ログインが必要です。" }, { status: 401 });
   }
 
-  let body: CreateRecordPayload;
-  try {
-    body = await request.json();
-  } catch {
+  if (parsedBody === null) {
     return Response.json({ error: "リクエストの形式が不正です。" }, { status: 400 });
   }
+  const body: CreateRecordPayload = parsedBody;
 
   const visitDate = body.visitDate?.trim() ?? "";
   const displayName = body.displayName?.trim() ?? "";

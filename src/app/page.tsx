@@ -1,6 +1,6 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 
-import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./_components/logout-button";
 import VisitRecordForm from "./_components/visit-record-form";
 
@@ -26,17 +26,17 @@ function todayInJapan() {
 }
 
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // 認証確認は proxy.ts が既に行っているので、ここでは結果(メールアドレス)を
+  // ヘッダー経由で受け取るだけにし、supabase.auth.getUser() の二重呼び出しを避ける。
+  const headersList = await headers();
+  const userEmail = headersList.get("x-user-email");
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
       <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="mx-auto w-full max-w-xl">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{user?.email}</p>
+            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{userEmail}</p>
             <div className="flex shrink-0 items-center gap-4">
               <Link
                 href="/records"

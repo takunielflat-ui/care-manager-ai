@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login"];
@@ -7,9 +7,14 @@ const PUBLIC_PATHS = ["/login"];
  * 全ページリクエストでSupabaseセッションをリフレッシュし、
  * 未ログイン時は /login へ、ログイン済みで /login にいる場合は / へ誘導する。
  * /api/* はここでは扱わない。各Route Handlerが個別に認証を確認する。
+ *
+ * ここで確認したユーザー情報は x-user-email ヘッダーに載せてページ側に渡す。
+ * 各ページで改めて supabase.auth.getUser() を呼ぶと認証サーバーへの
+ * ネットワーク往復が二重になるため、ページ側はこのヘッダーを読むだけにする。
  */
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  const requestHeaders = new Headers(request.headers);
+  let cookiesToApply: { name: string; value: string; options: CookieOptions }[] = [];
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,10 +28,7 @@ export async function proxy(request: NextRequest) {
           for (const { name, value } of cookiesToSet) {
             request.cookies.set(name, value);
           }
-          response = NextResponse.next({ request });
-          for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, options);
-          }
+          cookiesToApply = cookiesToSet;
         },
       },
     },
@@ -46,6 +48,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  if (user?.email) {
+    requestHeaders.set("x-user-email", user.email);
+  }
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  for (const { name, value, options } of cookiesToApply) {
+    response.cookies.set(name, value, options);
+  }
   return response;
 }
 
