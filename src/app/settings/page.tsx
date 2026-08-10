@@ -5,6 +5,8 @@ import LogoutButton from "../_components/logout-button";
 import KnownNamesManager from "./_components/known-names-manager";
 
 export const dynamic = "force-dynamic";
+// Node.jsサーバーレス関数のコールドスタートを避けるため、Edge Runtimeで動かす。
+export const runtime = "edge";
 
 export default async function SettingsPage() {
   const supabase = await createClient();

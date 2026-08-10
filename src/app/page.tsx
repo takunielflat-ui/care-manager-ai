@@ -6,6 +6,8 @@ import VisitRecordForm from "./_components/visit-record-form";
 
 // 訪問日の初期値にリクエスト時点の日付を使うため、ビルド時のプリレンダリングを避ける。
 export const dynamic = "force-dynamic";
+// Node.jsサーバーレス関数のコールドスタートを避けるため、Edge Runtimeで動かす。
+export const runtime = "edge";
 
 /**
  * `<input type="date">` 用の YYYY-MM-DD を日本時間で組み立てる。

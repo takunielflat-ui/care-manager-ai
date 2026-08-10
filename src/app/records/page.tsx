@@ -5,6 +5,8 @@ import LogoutButton from "../_components/logout-button";
 import RecordsList, { type VisitRecord } from "./_components/records-list";
 
 export const dynamic = "force-dynamic";
+// Node.jsサーバーレス関数のコールドスタートを避けるため、Edge Runtimeで動かす。
+export const runtime = "edge";
 
 export default async function RecordsPage() {
   const supabase = await createClient();
