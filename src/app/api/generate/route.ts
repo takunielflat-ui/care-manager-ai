@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       try {
         const messageStream = client.messages.stream(
           {
-            model: "claude-opus-5",
+            model: "claude-sonnet-5",
             max_tokens: 16000,
             output_config: { effort: "medium" },
             // システムプロンプトはリクエスト間で不変なのでキャッシュさせる。
