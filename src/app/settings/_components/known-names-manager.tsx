@@ -110,7 +110,7 @@ export default function KnownNamesManager({ initialKnownNames }: { initialKnownN
             id="name"
             type="text"
             required
-            placeholder="例: あいの郷"
+            placeholder="例: ひまわり荘"
             disabled={isSubmitting}
             value={name}
             onChange={(event) => setName(event.target.value)}
