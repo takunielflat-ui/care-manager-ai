@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import type { GenerationMode } from "@/lib/generationMode";
+
 const FIELD_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-zinc-100 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:disabled:bg-zinc-800";
 
@@ -19,6 +21,8 @@ export default function VisitRecordForm({
   const [note, setNote] = useState("");
   const [draftAvailable, setDraftAvailable] = useState(false);
 
+  // どちらのボタンで生成したかを保持する。初期選択は「簡潔」。
+  const [mode, setMode] = useState<GenerationMode>("concise");
   const [isGenerating, setIsGenerating] = useState(false);
   const [result, setResult] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -106,10 +110,10 @@ export default function VisitRecordForm({
 
   const canSubmit = note.trim() !== "" && !isGenerating;
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleGenerate(targetMode: GenerationMode) {
     if (isGenerating) return;
 
+    setMode(targetMode);
     setIsGenerating(true);
     setErrorMessage("");
     setResult("");
@@ -120,7 +124,7 @@ export default function VisitRecordForm({
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitDate, displayName, note }),
+        body: JSON.stringify({ visitDate, displayName, note, mode: targetMode }),
       });
 
       // 生成が始まる前の失敗は、通常の JSON エラーとして返る
@@ -223,8 +227,14 @@ export default function VisitRecordForm({
     }
   }
 
+  function handleFormSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    // Enterキーでの送信は既定モード（簡潔）で生成する。
+    void handleGenerate("concise");
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+    <form onSubmit={handleFormSubmit} className="flex flex-col gap-6">
       {showSavedToast && (
         <div
           role="status"
@@ -377,23 +387,42 @@ export default function VisitRecordForm({
       )}
 
       {/* メモ欄が長いので、ボタンは常に親指の届く画面下端に留めておく */}
-      <div className="sticky bottom-0 -mx-4 -mb-6 border-t border-zinc-200 bg-zinc-50/80 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-black/80">
+      <div className="sticky bottom-0 -mx-4 -mb-6 flex gap-2 border-t border-zinc-200 bg-zinc-50/80 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-black/80">
         <button
           type="submit"
           disabled={!canSubmit}
           aria-busy={isGenerating}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-5 text-lg font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:scale-[0.99] active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-teal-700 px-3 py-5 text-base font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:scale-[0.99] active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
         >
-          {isGenerating ? (
+          {isGenerating && mode === "concise" ? (
             <>
               <span
                 aria-hidden="true"
                 className="size-5 animate-spin rounded-full border-2 border-white/40 border-t-white"
               />
-              🤖 AIが作成中...
+              作成中...
             </>
           ) : (
-            "✨ 第5表を作成"
+            "⚡ 簡潔"
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleGenerate("detailed")}
+          disabled={!canSubmit}
+          aria-busy={isGenerating}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-teal-700 bg-white px-3 py-5 text-base font-bold text-teal-700 shadow-sm transition-all hover:bg-teal-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:border-zinc-300 disabled:text-zinc-400 dark:border-teal-500 dark:bg-zinc-950 dark:text-teal-400 dark:hover:bg-zinc-900 dark:disabled:border-zinc-700 dark:disabled:text-zinc-600"
+        >
+          {isGenerating && mode === "detailed" ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-5 animate-spin rounded-full border-2 border-teal-700/40 border-t-teal-700 dark:border-teal-400/40 dark:border-t-teal-400"
+              />
+              作成中...
+            </>
+          ) : (
+            "📄 詳細"
           )}
         </button>
       </div>

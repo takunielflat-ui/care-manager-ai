@@ -2,10 +2,11 @@ import Anthropic from "@anthropic-ai/sdk";
 
 import {
   buildFifthSheetUserMessage,
-  FIFTH_SHEET_SYSTEM_PROMPT,
+  getFifthSheetSystemPrompt,
 } from "@/prompts/fifthSheetPrompt";
 import { createClient } from "@/lib/supabase/server";
 import { anonymizeForAI, EMPTY_KNOWN_NAMES, type Category, type KnownNames } from "@/lib/anonymize";
+import type { GenerationMode } from "@/lib/generationMode";
 
 const client = new Anthropic();
 
@@ -13,6 +14,7 @@ type ClientPayload = {
   visitDate?: string;
   displayName?: string;
   note?: string;
+  mode?: string;
 };
 
 /** 想定内の失敗を、利用者に見せる日本語メッセージへ変換する。 */
@@ -55,6 +57,8 @@ export async function POST(request: Request) {
   const visitDate = body.visitDate?.trim() ?? "";
   const displayName = body.displayName?.trim() ?? "";
   const note = body.note?.trim() ?? "";
+  // 不正・未指定な値は「簡潔」にフォールバックする（デフォルトモード）。
+  const mode: GenerationMode = body.mode === "detailed" ? "detailed" : "concise";
 
   if (!visitDate || !displayName || !note) {
     return Response.json(
@@ -111,12 +115,12 @@ export async function POST(request: Request) {
             model: "claude-sonnet-5",
             max_tokens: 16000,
             output_config: { effort: "medium" },
-            // システムプロンプトはリクエスト間で不変なのでキャッシュさせる。
-            // 2回目以降は前置き処理が短くなり、初動が早くなる。
+            // システムプロンプトはモードごとに不変なのでキャッシュさせる。
+            // 同じモードの2回目以降は前置き処理が短くなり、初動が早くなる。
             system: [
               {
                 type: "text",
-                text: FIFTH_SHEET_SYSTEM_PROMPT,
+                text: getFifthSheetSystemPrompt(mode),
                 cache_control: { type: "ephemeral" },
               },
             ],
@@ -148,7 +152,7 @@ export async function POST(request: Request) {
         // キャッシュが効いているかを運用中に確認できるようにする（本文は出さない）
         const { usage } = final;
         console.log(
-          `[generate] in=${usage.input_tokens} out=${usage.output_tokens} ` +
+          `[generate] mode=${mode} in=${usage.input_tokens} out=${usage.output_tokens} ` +
             `cacheWrite=${usage.cache_creation_input_tokens ?? 0} ` +
             `cacheRead=${usage.cache_read_input_tokens ?? 0} stop=${final.stop_reason}`,
         );
