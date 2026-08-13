@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export type VisitRecord = {
   id: string;
@@ -40,6 +40,14 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // コピー完了の表示は少し置いてから元に戻す
+  useEffect(() => {
+    if (copiedId === null) return;
+    const timer = setTimeout(() => setCopiedId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copiedId]);
 
   const visibleRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -155,9 +163,10 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
     }
   }
 
-  async function handleCopy(text: string) {
+  async function handleCopy(record: VisitRecord) {
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(record.generated_text);
+      setCopiedId(record.id);
     } catch {
       setErrorMessage("コピーできませんでした。手動で選択してコピーしてください。");
     }
@@ -276,10 +285,10 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => handleCopy(record.generated_text)}
+                            onClick={() => handleCopy(record)}
                             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
                           >
-                            📋 コピー
+                            {copiedId === record.id ? "☑ コピーしました" : "📋 コピー"}
                           </button>
                           <button
                             type="button"

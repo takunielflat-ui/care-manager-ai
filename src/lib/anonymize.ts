@@ -92,6 +92,23 @@ const CATEGORY_SUFFIX: Record<Category, string> = {
 
 const PERSON_HONORIFIC_SUFFIX_PATTERN = /(様|さん|氏)$/;
 
+/**
+ * 「〜様/さん/氏」の形になっていても個人名ではない続柄・役職などの語。
+ * これらは人名パターンにマッチしても匿名化の対象から除外する。
+ */
+const NON_PERSON_WORDS = new Set([
+  // 続柄
+  "本人", "ご本人", "長男", "長女", "次男", "次女", "三男", "三女", "四男", "四女",
+  "息子", "娘", "夫", "妻", "父", "母", "祖父", "祖母", "曾祖父", "曾祖母",
+  "兄", "弟", "姉", "妹", "伯父", "叔父", "伯母", "叔母", "甥", "姪", "孫",
+  "義父", "義母", "義兄", "義弟", "義姉", "義妹", "元夫", "元妻",
+  "同居人", "隣人", "友人", "知人", "後見人", "保証人",
+  // 職種・役割
+  "主治医", "担当医", "医師", "看護師", "薬剤師", "理学療法士", "作業療法士",
+  "言語聴覚士", "相談員", "職員", "担当者", "施設長", "管理者", "責任者",
+  "事務員", "訪問員", "介護士", "支援員", "患者", "利用者", "家族",
+]);
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -147,7 +164,8 @@ export function anonymizeForAI(
   let anonymizedNote = input.note;
 
   for (const rule of RULES) {
-    anonymizedNote = anonymizedNote.replace(rule.pattern, (_match, name: string, typeWord: string) => {
+    anonymizedNote = anonymizedNote.replace(rule.pattern, (match, name: string, typeWord: string) => {
+      if (rule.category === "person" && NON_PERSON_WORDS.has(name)) return match;
       const suffix = rule.placeholderSuffix ?? typeWord;
       return registries[rule.category].resolve(
         name,
