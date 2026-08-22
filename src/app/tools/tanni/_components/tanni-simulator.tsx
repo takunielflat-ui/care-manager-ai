@@ -8,7 +8,9 @@ import {
   地域区分,
   要介護度一覧,
   高額介護サービス費,
+  負担限度額,
   type 要介護度,
+  type 負担限度額段階,
 } from "@/lib/kaigo/master";
 import { 計算 } from "@/lib/kaigo/calc";
 import ServiceRow from "./service-row";
@@ -115,6 +117,12 @@ export default function TanniSimulator() {
   const setKogaku = (id: string) =>
     setState((s) => {
       const next = { ...s, 高額区分: id };
+      saveCond(next);
+      return next;
+    });
+  const set負担限度額段階 = (v: 負担限度額段階 | null) =>
+    setState((s) => {
+      const next = { ...s, 負担限度額段階: v };
       saveCond(next);
       return next;
     });
@@ -254,6 +262,25 @@ export default function TanniSimulator() {
             </div>
           </div>
 
+          <div className="mb-3 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <label className={labelCls}>負担限度額認定（ショートステイの食費・居住費）</label>
+            <select
+              className={selectCls}
+              value={state.負担限度額段階 ?? ""}
+              onChange={(e) => set負担限度額段階((e.target.value || null) as 負担限度額段階 | null)}
+            >
+              <option value="">認定なし（基準費用額のまま）</option>
+              {負担限度額.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+              認定証をお持ちの方はここで段階を選ぶと、短期入所の行で「食費」「滞在費」を入力したときの金額候補が軽減後の金額になります。高額介護サービス費（自己負担額の上限）とは別の制度です。
+            </div>
+          </div>
+
           <h2 className="mt-4 mb-2 px-1 text-xs font-bold tracking-wide text-zinc-500 dark:text-zinc-400">利用するサービス</h2>
           {state.rows.length === 0 ? (
             <div className="mb-3 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-[13px] text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
@@ -265,6 +292,7 @@ export default function TanniSimulator() {
                 key={row.id}
                 row={row}
                 度={state.要介護度}
+                負担限度額段階={state.負担限度額段階}
                 jigyoshoList={state.jigyosho}
                 onChange={(patch) => updateRow(row.id, patch)}
                 onSelectJigyosho={(jid) => selectRowJigyosho(row.id, jid)}

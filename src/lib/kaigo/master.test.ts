@@ -16,7 +16,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { 計算, 計算ステップ, 週回数から月回数, 円, type 計算行 } from "./calc.ts";
-import { 限度額, サービス, 検証ラベル, クイック追加, type 度別単位, type 単位表 } from "./master.ts";
+import {
+  限度額,
+  サービス,
+  検証ラベル,
+  クイック追加,
+  高額介護サービス費,
+  負担限度額,
+  自費プリセット,
+  自費プリセットを取得,
+  type 度別単位,
+  type 単位表,
+} from "./master.ts";
 
 const U = (s: string, a: string, b: string, d: string): number => {
   const table = (サービス[s].units ?? サービス[s].flatUnits) as 単位表;
@@ -292,4 +303,75 @@ test("計算ステップ（家族向け印刷）が結果と一致するか", ()
 
   // 複合ケースの合計が円表記でも一致すること
   assert.equal(円(複合.月額合計), 円(計算ステップ(複合, 0.1).合計));
+});
+
+test("高額介護サービス費（段階ラベル・上限額）", () => {
+  const byId = Object.fromEntries(高額介護サービス費.map((k) => [k.id, k.上限]));
+  assert.equal(byId.teishotoku, 15000, "第1・2段階 上限");
+  assert.equal(byId.genzei, 24600, "第3段階 上限");
+  assert.equal(byId.ippan, 44400, "第4段階 上限");
+  assert.equal(byId.gendo3, 93000, "第5段階 上限");
+  assert.equal(byId.gendo4, 140100, "第6段階 上限");
+});
+
+test("負担限度額（短期入所の食費・居住費、令和8年8月1日時点）", () => {
+  const byId = Object.fromEntries(負担限度額.map((g) => [g.id, g]));
+  assert.deepEqual(
+    byId.段階1,
+    { id: "段階1", label: byId.段階1.label, 食費短期: 300, 多床室: 0, 従来型個室特養: 380, 従来型個室老健: 550, ユニット型個室: 880 },
+    "第1段階",
+  );
+  assert.deepEqual(
+    byId.段階2,
+    { id: "段階2", label: byId.段階2.label, 食費短期: 600, 多床室: 430, 従来型個室特養: 480, 従来型個室老健: 550, ユニット型個室: 880 },
+    "第2段階",
+  );
+  assert.deepEqual(
+    byId["段階3の1"],
+    { id: "段階3の1", label: byId["段階3の1"].label, 食費短期: 1030, 多床室: 430, 従来型個室特養: 880, 従来型個室老健: 1370, ユニット型個室: 1370 },
+    "第3段階①",
+  );
+  assert.deepEqual(
+    byId["段階3の2"],
+    { id: "段階3の2", label: byId["段階3の2"].label, 食費短期: 1360, 多床室: 530, 従来型個室特養: 980, 従来型個室老健: 1470, ユニット型個室: 1470 },
+    "第3段階②",
+  );
+});
+
+test("自費プリセットを取得：段階なし・serviceKeyなしは自費プリセットのまま", () => {
+  const got = 自費プリセットを取得(null);
+  assert.deepEqual(got, 自費プリセット);
+});
+
+test("自費プリセットを取得：段階なしでも従来型個室は施設タイプで金額が違う（老健型は基準額が別建て）", () => {
+  const amountOf = (list: typeof 自費プリセット, name: string) => list.find((p) => p.name === name)?.amount;
+
+  const 特養基準額 = 自費プリセットを取得(null, "短期入所生活介護");
+  assert.equal(amountOf(特養基準額, "滞在費（従来型個室）"), 1231, "特養型の基準費用額は自費プリセットと同じ");
+
+  const 老健基準額 = 自費プリセットを取得(null, "短期入所療養介護");
+  assert.equal(amountOf(老健基準額, "滞在費（従来型個室）"), 1728, "老健型の基準費用額は特養型と別建て");
+  // 従来型個室以外は施設タイプによらず変わらない
+  assert.equal(amountOf(老健基準額, "滞在費（多床室）"), 915, "多床室は施設タイプで変わらない");
+  assert.equal(amountOf(老健基準額, "食費（施設・基準費用額）"), 1545, "食費は施設タイプで変わらない");
+});
+
+test("自費プリセットを取得：段階を指定すると軽減後の金額に差し替わる（施設タイプで従来型個室が違う）", () => {
+  const amountOf = (list: typeof 自費プリセット, name: string) => list.find((p) => p.name === name)?.amount;
+
+  const 特養段階1 = 自費プリセットを取得("段階1", "短期入所生活介護");
+  assert.equal(amountOf(特養段階1, "食費（施設・基準費用額）"), 300, "食費 段階1");
+  assert.equal(amountOf(特養段階1, "滞在費（多床室）"), 0, "多床室 段階1");
+  assert.equal(amountOf(特養段階1, "滞在費（従来型個室）"), 380, "特養 従来型個室 段階1");
+  assert.equal(amountOf(特養段階1, "滞在費（ユニット型個室）"), 880, "ユニット型個室 段階1");
+
+  const 老健段階1 = 自費プリセットを取得("段階1", "短期入所療養介護");
+  assert.equal(amountOf(老健段階1, "滞在費（従来型個室）"), 550, "老健 従来型個室 段階1（特養と異なる）");
+
+  const 段階3の2 = 自費プリセットを取得("段階3の2", "短期入所生活介護");
+  assert.equal(amountOf(段階3の2, "食費（施設・基準費用額）"), 1360, "食費 段階3の2");
+
+  // 他の自費項目（食費・おやつ代など、短期入所と無関係なもの）は変化しない
+  assert.equal(amountOf(特養段階1, "食費"), 800, "無関係なプリセットは不変");
+  assert.equal(amountOf(特養段階1, "おやつ代"), 100, "無関係なプリセットは不変");
 });

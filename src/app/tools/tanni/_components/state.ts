@@ -14,6 +14,7 @@ import {
   要介護度一覧,
   type サービス定義,
   type 要介護度,
+  type 負担限度額段階,
 } from "@/lib/kaigo/master";
 import { 週回数から月回数, type 自費項目 } from "@/lib/kaigo/calc";
 
@@ -50,6 +51,7 @@ export interface 条件 {
   地域区分: string;
   負担割合: number;
   高額区分: string;
+  負担限度額段階: 負担限度額段階 | null;
   印刷作成者: string;
 }
 
@@ -65,6 +67,7 @@ export const 既定条件: 条件 = {
   地域区分: "その他",
   負担割合: 0.1,
   高額区分: "ippan",
+  負担限度額段階: null,
   印刷作成者: "",
 };
 
@@ -97,6 +100,7 @@ export const saveCond = (s: AppState) =>
     地域区分: s.地域区分,
     負担割合: s.負担割合,
     高額区分: s.高額区分,
+    負担限度額段階: s.負担限度額段階,
     印刷作成者: s.印刷作成者,
   });
 export const saveJigyosho = (s: AppState) => saveLocal(STORAGE_JIGYOSHO, s.jigyosho);

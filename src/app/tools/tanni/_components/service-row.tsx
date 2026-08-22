@@ -1,6 +1,12 @@
 "use client";
 
-import { サービス, 検証ラベル, 自費プリセット, type 要介護度 } from "@/lib/kaigo/master";
+import {
+  サービス,
+  検証ラベル,
+  自費プリセットを取得,
+  type 要介護度,
+  type 負担限度額段階,
+} from "@/lib/kaigo/master";
 import { 単位数を取得, は月額包括, 週回数から月回数, type 自費項目 } from "@/lib/kaigo/calc";
 import { axisInfo, keys2Of, 度が使えるか, type 事業所, type 行state } from "./state";
 
@@ -19,6 +25,7 @@ const labelCls = "mb-1.5 block text-xs font-bold text-zinc-500 dark:text-zinc-40
 export default function ServiceRow({
   row,
   度,
+  負担限度額段階,
   jigyoshoList,
   onChange,
   onSelectJigyosho,
@@ -27,12 +34,14 @@ export default function ServiceRow({
 }: {
   row: 行state;
   度: 要介護度;
+  負担限度額段階: 負担限度額段階 | null;
   jigyoshoList: 事業所[];
   onChange: (patch: Partial<行state>) => void;
   onSelectJigyosho: (jigyoshoId: string) => void;
   onRemove: () => void;
   onOpenJigyosho: (service: string) => void;
 }) {
+  const 自費プリセット = 自費プリセットを取得(負担限度額段階, row.service);
   const def = サービス[row.service];
   const ai = axisInfo(def);
   const 包括 = は月額包括(row, 度);
