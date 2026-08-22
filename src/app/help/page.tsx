@@ -44,7 +44,17 @@ export default async function HelpPage() {
             >
               ← 新しい記録を作成
             </Link>
-            {user && <LogoutButton />}
+            <div className="flex shrink-0 items-center gap-4">
+              <Link
+                href="/tools/tanni"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+              >
+                単位数電卓
+              </Link>
+              {user && <LogoutButton />}
+            </div>
           </div>
           <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             使い方

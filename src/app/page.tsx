@@ -56,6 +56,14 @@ export default async function Home() {
               >
                 使い方
               </Link>
+              <Link
+                href="/tools/tanni"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+              >
+                単位数電卓
+              </Link>
               <LogoutButton />
             </div>
           </div>
