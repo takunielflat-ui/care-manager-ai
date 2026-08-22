@@ -35,7 +35,13 @@ export default function SummarySheet({
   onClearAll: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const pct = Math.min(100, r.使用率 * 100);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    window.setTimeout(() => setToastMsg(null), 1800);
+  };
 
   const copySummary = () => {
     const L: string[] = [];
@@ -55,80 +61,107 @@ export default function SummarySheet({
     L.push("");
     L.push("※加算等により実際の金額は前後します。正確な金額は各事業所の料金表をご確認ください。");
     const txt = L.join("\n");
-    navigator.clipboard?.writeText(txt).catch(() => {});
+    navigator.clipboard?.writeText(txt).then(
+      () => showToast("コピーしました"),
+      () => showToast("コピーできませんでした"),
+    );
   };
 
   return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-30 flex max-h-[88vh] flex-col rounded-t-2xl bg-white shadow-[0_-4px_24px_rgba(16,40,50,0.14)] dark:bg-zinc-950"
-      data-band={r.帯}
-    >
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex-none px-[18px] pt-3 pb-[calc(12px+env(safe-area-inset-bottom))] text-left"
-      >
-        <div className="mx-auto mb-2.5 h-1 w-9 rounded-full bg-zinc-200 dark:bg-zinc-700" />
-        <div className="flex items-baseline gap-2.5">
-          <span className="shrink-0 text-xs font-bold text-zinc-500 dark:text-zinc-400">
-            今月の自己負担目安
-            <br />
-            <span className="text-[11px] font-normal">タップで内訳 {open ? "▼" : "▲"}</span>
-          </span>
-          <span className={`ml-auto text-[27px] font-extrabold tracking-tight tabular-nums ${r.帯 === "over" ? "text-red-600 dark:text-red-400" : "text-teal-700 dark:text-teal-400"}`}>
-            {円(r.月額合計)}
-          </span>
+    <>
+      {toastMsg && (
+        <div className="fixed bottom-[132px] left-1/2 z-40 -translate-x-1/2 rounded-full bg-zinc-900 px-[18px] py-2.5 text-[13.5px] font-bold text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
+          {toastMsg}
         </div>
-        {rowsCount > 0 ? (
-          <div className="mt-1 text-right text-[11.5px] tabular-nums text-zinc-500 dark:text-zinc-400">
-            保険内 <b className="text-zinc-900 dark:text-zinc-50">{円(r.介護保険分自己負担)}</b>
-            {r.超過自己負担 ? (
-              <>
-                {" "}
-                ／ 超過 <b className="text-red-600 dark:text-red-400">{円(r.超過自己負担)}</b>
-              </>
-            ) : null}
-            {r.自費合計 ? (
-              <>
-                {" "}
-                ／ 自費 <b className="text-zinc-900 dark:text-zinc-50">{円(r.自費合計)}</b>
-              </>
-            ) : null}
-          </div>
-        ) : (
-          <div className="mt-1 text-right text-[11.5px] text-zinc-500 dark:text-zinc-400">サービスを追加してください</div>
-        )}
-        <div className="mt-2.5 flex items-center gap-2.5">
-          <div className="flex-1">
-            <GaugeBar r={r} />
-          </div>
-          {rowsCount > 0 && (
-            <div className="text-[11px] whitespace-nowrap tabular-nums text-zinc-500 dark:text-zinc-400">
-              <b className="text-zinc-900 dark:text-zinc-50">{r.給付管理単位.toLocaleString()}</b> / {r.限度額.toLocaleString()} 単位
-              <span
-                className={`ml-1.5 font-extrabold ${
-                  r.帯 === "over" ? "text-red-600 dark:text-red-400" : r.帯 === "caution" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
-                }`}
-              >
-                {pct.toFixed(0)}％
+      )}
+      <div
+        className="fixed inset-x-0 bottom-0 z-30 flex max-h-[88vh] flex-col rounded-t-2xl bg-white shadow-[0_-4px_24px_rgba(16,40,50,0.14)] dark:bg-zinc-950"
+        data-band={r.帯}
+      >
+        <div className="flex-none px-[18px] pt-3">
+          <button type="button" onClick={() => setOpen((v) => !v)} className="w-full text-left">
+            <div className="mx-auto mb-2.5 h-1 w-9 rounded-full bg-zinc-200 dark:bg-zinc-700" />
+            <div className="flex items-baseline gap-2.5">
+              <span className="shrink-0 text-xs font-bold text-zinc-500 dark:text-zinc-400">
+                今月の自己負担目安
+                <br />
+                <span className="text-[11px] font-normal">タップで内訳 {open ? "▼" : "▲"}</span>
+              </span>
+              <span className={`ml-auto text-[27px] font-extrabold tracking-tight tabular-nums ${r.帯 === "over" ? "text-red-600 dark:text-red-400" : "text-teal-700 dark:text-teal-400"}`}>
+                {円(r.月額合計)}
               </span>
             </div>
-          )}
-        </div>
-        {r.超過自己負担 > 0 ? (
-          <div className="mt-2.5 rounded-lg bg-red-100 px-3 py-2.5 text-[13px] leading-relaxed font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
-            ⚠️ 上限を <b>{r.超過単位.toLocaleString()}単位</b> 超えています。
-            <br />
-            <b>{円(r.超過自己負担)}</b> 分は<b>全額自己負担</b>になります。
-          </div>
-        ) : r.帯 === "caution" && rowsCount > 0 ? (
-          <div className="mt-2.5 rounded-lg bg-amber-100 px-3 py-2.5 text-[13px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-            上限まであと <b>{r.残単位.toLocaleString()}単位</b>。追加するときは注意してください。
-          </div>
-        ) : null}
-      </button>
+            {rowsCount > 0 ? (
+              <div className="mt-1 text-right text-[11.5px] tabular-nums text-zinc-500 dark:text-zinc-400">
+                保険内 <b className="text-zinc-900 dark:text-zinc-50">{円(r.介護保険分自己負担)}</b>
+                {r.超過自己負担 ? (
+                  <>
+                    {" "}
+                    ／ 超過 <b className="text-red-600 dark:text-red-400">{円(r.超過自己負担)}</b>
+                  </>
+                ) : null}
+                {r.自費合計 ? (
+                  <>
+                    {" "}
+                    ／ 自費 <b className="text-zinc-900 dark:text-zinc-50">{円(r.自費合計)}</b>
+                  </>
+                ) : null}
+              </div>
+            ) : (
+              <div className="mt-1 text-right text-[11.5px] text-zinc-500 dark:text-zinc-400">サービスを追加してください</div>
+            )}
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <div className="flex-1">
+                <GaugeBar r={r} />
+              </div>
+              {rowsCount > 0 && (
+                <div className="text-[11px] whitespace-nowrap tabular-nums text-zinc-500 dark:text-zinc-400">
+                  <b className="text-zinc-900 dark:text-zinc-50">{r.給付管理単位.toLocaleString()}</b> / {r.限度額.toLocaleString()} 単位
+                  <span
+                    className={`ml-1.5 font-extrabold ${
+                      r.帯 === "over" ? "text-red-600 dark:text-red-400" : r.帯 === "caution" ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"
+                    }`}
+                  >
+                    {pct.toFixed(0)}％
+                  </span>
+                </div>
+              )}
+            </div>
+            {r.超過自己負担 > 0 ? (
+              <div className="mt-2.5 rounded-lg bg-red-100 px-3 py-2.5 text-[13px] leading-relaxed font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
+                ⚠️ 上限を <b>{r.超過単位.toLocaleString()}単位</b> 超えています。
+                <br />
+                <b>{円(r.超過自己負担)}</b> 分は<b>全額自己負担</b>になります。
+              </div>
+            ) : r.帯 === "caution" && rowsCount > 0 ? (
+              <div className="mt-2.5 rounded-lg bg-amber-100 px-3 py-2.5 text-[13px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                上限まであと <b>{r.残単位.toLocaleString()}単位</b>。追加するときは注意してください。
+              </div>
+            ) : null}
+          </button>
 
-      {open && (
+          {rowsCount > 0 && (
+            <div className="mt-3 grid grid-cols-2 gap-2 pb-3">
+              <button
+                type="button"
+                onClick={onOpenFamily}
+                className="w-full rounded-xl bg-teal-700 py-3 text-[14px] font-bold text-white"
+              >
+                👨‍👩‍👧 家族に見せる画面
+              </button>
+              <button
+                type="button"
+                onClick={onOpenPrint}
+                className="w-full rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
+              >
+                🖨 印刷用の紙を作る
+              </button>
+            </div>
+          )}
+          <div className="pb-[env(safe-area-inset-bottom)]" />
+        </div>
+
+        {open && (
         <div className="overflow-y-auto px-3.5 pb-3.5">
           {rowsCount === 0 ? (
             <div className="p-6 text-center text-sm text-zinc-500 dark:text-zinc-400">サービスを追加すると集計が出ます</div>
@@ -206,16 +239,6 @@ export default function SummarySheet({
               </div>
 
               <div className="grid gap-2">
-                <button type="button" onClick={onOpenFamily} className="w-full rounded-xl bg-teal-700 py-3.5 text-[15px] font-bold text-white">
-                  👨‍👩‍👧 家族に見せる画面
-                </button>
-                <button
-                  type="button"
-                  onClick={onOpenPrint}
-                  className="w-full rounded-xl border-[1.5px] border-teal-700 bg-white py-3.5 text-[15px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
-                >
-                  🖨 家族にわたす紙を作る
-                </button>
                 <button
                   type="button"
                   onClick={copySummary}
@@ -236,7 +259,8 @@ export default function SummarySheet({
             </>
           )}
         </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 }

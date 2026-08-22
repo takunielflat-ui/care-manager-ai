@@ -188,6 +188,12 @@ export default function TanniSimulator() {
             <h1 className="text-[17px] font-bold tracking-tight">単位数シミュレーター</h1>
             <span className="block text-[11px] opacity-85">訪問先で、その場で費用を出す</span>
           </div>
+          <Link
+            href="/tools/tanni/help"
+            className="shrink-0 rounded-full bg-white/15 px-3.5 py-2 text-[13px] font-bold"
+          >
+            使い方
+          </Link>
           <button
             type="button"
             onClick={openJigyoshoDialog}
