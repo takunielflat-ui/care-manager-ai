@@ -3,6 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login"];
 
+/** ログイン不要で公開するツール群。配下のパスもまとめて対象外にする。 */
+const PUBLIC_PATH_PREFIXES = ["/tools/tanni"];
+const isPublicPrefixPath = (pathname: string) =>
+  PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+
 /**
  * 全ページリクエストでSupabaseセッションをリフレッシュし、
  * 未ログイン時は /login へ、ログイン済みで /login にいる場合は / へ誘導する。
@@ -13,6 +18,12 @@ const PUBLIC_PATHS = ["/login"];
  * ネットワーク往復が二重になるため、ページ側はこのヘッダーを読むだけにする。
  */
 export async function proxy(request: NextRequest) {
+  // 無料公開ツール（SNS・検索流入の入口）。認証を確認せず、
+  // Supabaseへの往復も省いて高速に返す。
+  if (isPublicPrefixPath(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   const requestHeaders = new Headers(request.headers);
   let cookiesToApply: { name: string; value: string; options: CookieOptions }[] = [];
 
