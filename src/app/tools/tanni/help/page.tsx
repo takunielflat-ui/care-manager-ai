@@ -103,13 +103,17 @@ export default function TanniHelpPage() {
         </section>
 
         <section className="flex flex-col gap-2">
-          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">計算結果を保存したい場合</h2>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">計算結果を保存・比較したい場合</h2>
           <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-            このページ単体では、入力したサービスの内容は保存されません(事業所設定を除く)。利用者ごとに試算を残したり、プランA・Bを比較したりしたい場合は
+            ログインすると、画面下の「💾 この計算を保存する」で利用者ごとに計算を残せます。保存した計算は
+            <Link href="/tools/tanni/plans" className="mx-1 text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
+              保存した計算の一覧
+            </Link>
+            ページで見直したり、2件を並べて比較したりできます。保存・閲覧には
             <Link href="/login" className="mx-1 text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
               無料登録
             </Link>
-            してください。
+            が必要です（事業所設定はログインなしでこの端末に保存されます）。
           </p>
         </section>
 

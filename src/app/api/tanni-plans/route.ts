@@ -18,7 +18,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("tanni_plans")
-    .select("id, title, updated_at")
+    .select("id, title, state, updated_at")
     .order("updated_at", { ascending: false });
 
   if (error) {

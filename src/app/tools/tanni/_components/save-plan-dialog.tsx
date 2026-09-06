@@ -228,9 +228,17 @@ function SavePlanDialogBody({
             </p>
           )}
 
-          <h3 className="mb-2 px-1 text-xs font-bold tracking-wide text-zinc-500 dark:text-zinc-400">
-            保存済みのプラン
-          </h3>
+          <div className="mb-2 flex items-center justify-between gap-2 px-1">
+            <h3 className="text-xs font-bold tracking-wide text-zinc-500 dark:text-zinc-400">
+              保存済みのプラン
+            </h3>
+            <Link
+              href="/tools/tanni/plans"
+              className="shrink-0 text-[12px] font-bold text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+            >
+              一覧・比較ページ →
+            </Link>
+          </div>
           {plansLoading ? (
             <div className="p-6 text-center text-sm text-zinc-500 dark:text-zinc-400">読み込んでいます…</div>
           ) : plans.length === 0 ? (

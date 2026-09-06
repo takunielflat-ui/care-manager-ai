@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import {
   MASTER_VERSION,
@@ -12,7 +12,6 @@ import {
   type 要介護度,
   type 負担限度額段階,
 } from "@/lib/kaigo/master";
-import { 計算 } from "@/lib/kaigo/calc";
 import ServiceRow from "./service-row";
 import QuickAdd from "./quick-add";
 import SummarySheet from "./summary-sheet";
@@ -20,6 +19,7 @@ import FamilyDialog from "./family-dialog";
 import PrintDialog from "./print-dialog";
 import JigyoshoDialog from "./jigyosho-dialog";
 import SavePlanDialog, { type TanniPlanState } from "./save-plan-dialog";
+import { プランを計算 } from "./plan-calc";
 import {
   applyJigyosho,
   loadCond,
@@ -76,27 +76,10 @@ export default function TanniSimulator() {
     [state.高額区分],
   );
 
-  const result = useMemo(
-    () =>
-      計算({
-        要介護度: state.要介護度,
-        地域区分: state.地域区分,
-        負担割合: state.負担割合,
-        高額上限,
-        rows: state.rows.map((x) => ({
-          id: x.id,
-          service: x.service,
-          軸1: x.軸1,
-          軸2: x.軸2,
-          manualUnits: x.manualUnits,
-          月回数: x.月回数,
-          処遇改善区分: x.処遇改善区分,
-          加算率上書き: x.加算率上書き,
-          自費: x.自費,
-        })),
-      }),
-    [state.要介護度, state.地域区分, state.負担割合, 高額上限, state.rows],
-  );
+  // 計算そのものは plan-calc.ts の共有ヘルパに委譲する。
+  // 保存一覧（tanni-plans-view）と同じ関数を使うことで、
+  // 電卓の数字と一覧・比較の数字が必ず一致する。
+  const result = useMemo(() => プランを計算(state), [state]);
 
   const setDegree = (度: 要介護度) =>
     setState((s) => {
@@ -165,6 +148,29 @@ export default function TanniSimulator() {
       saveCond(next);
       return next;
     });
+
+  // 「保存した計算」一覧から ?plan=<id> 付きで開かれたら、その保存を読み込む。
+  // 読み込んだらURLからパラメータを外し、再読み込みで二重取得しないようにする。
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("plan");
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/tanni-plans/${id}`);
+        const data: { plan?: { state: TanniPlanState } } = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && data.plan?.state) loadPlan(data.plan.state);
+      } catch {
+        // 読み込めなくても電卓は通常どおり使えるので、何もしない
+      } finally {
+        if (!cancelled) window.history.replaceState(null, "", "/tools/tanni");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // マウント時に1回だけ実行する
+  }, []);
 
   const openJigyoshoDialog = () => setJigyoshoOpen(true);
   const addJigyosho = () =>
@@ -348,11 +354,14 @@ export default function TanniSimulator() {
             この試算は概算です。各種加算・減算や事業所独自の設定により実際の金額とは差が出ます。ご契約前には必ず事業所の重要事項説明書・料金表をご確認ください。
           </div>
           <div className="mt-2.5">
-            計算結果を利用者ごとに保存したり、プランA/Bを比較したいときは{" "}
-            <Link href="/login" className="font-bold text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
-              無料登録
+            計算は「💾 この計算を保存する」で利用者ごとに保存できます。保存した計算の見直し・プランA/Bの比較は{" "}
+            <Link
+              href="/tools/tanni/plans"
+              className="font-bold text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+            >
+              保存した計算の一覧
             </Link>
-            してください。
+            から（保存・閲覧には無料登録が必要です）。
           </div>
         </footer>
 
