@@ -54,7 +54,8 @@ export type 限度額対象範囲 = "kaigo" | "yobo" | "both" | "auto";
 export interface サービス定義 {
   label: string;
   icon: string;
-  jinkenhi: 70 | 55 | 45;
+  /** 0 = 地域区分による単価調整を受けない（全国一律1単位=10.00円）。福祉用具貸与など。 */
+  jinkenhi: 70 | 55 | 45 | 0;
   gendogaku: boolean;
   freq: 頻度;
   verified: 検証ステータス;
@@ -136,7 +137,7 @@ export const 高額介護サービス費: 高額介護サービス費区分[] = 
 /* =====================================================================
  *  サービス定義
  *  ---------------------------------------------------------------
- *  jinkenhi : 人件費割合(70/55/45) → 地域単価の列を決める
+ *  jinkenhi : 人件費割合(70/55/45) → 地域単価の列を決める。0 = 地域区分の影響を受けず常に10.00円
  *  gendogaku: true = 区分支給限度基準額の対象
  *  freq     : 'per_use'(1回ごと) | 'per_day'(1日ごと) | 'monthly'(月額包括)
  *  axes     : 単位数表の軸。['規模','時間区分'] など
@@ -556,12 +557,12 @@ export const サービス: Record<string, サービス定義> = {
   福祉用具貸与: {
     label: "福祉用具貸与",
     icon: "🦽",
-    jinkenhi: 45,
+    jinkenhi: 0,
     gendogaku: true,
     freq: "monthly",
     verified: "manual",
     manualOnly: true,
-    note: "単位数は事業所が設定した実勢価格によります。事業所の見積書の単位数を直接入力してください。",
+    note: "単位数は事業所が設定した実勢価格によります。事業所の見積書の単位数を直接入力してください。1単位＝10円で地域区分による単価調整はありません。",
     shogu: {},
     presets: [
       "車いす",

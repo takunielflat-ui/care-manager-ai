@@ -47,8 +47,6 @@ export default async function HelpPage() {
             <div className="flex shrink-0 items-center gap-4">
               <Link
                 href="/tools/tanni"
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
               >
                 単位数電卓

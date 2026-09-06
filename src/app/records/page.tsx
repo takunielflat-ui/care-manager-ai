@@ -39,8 +39,6 @@ export default async function RecordsPage() {
               </Link>
               <Link
                 href="/tools/tanni"
-                target="_blank"
-                rel="noopener noreferrer"
                 className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
               >
                 単位数電卓

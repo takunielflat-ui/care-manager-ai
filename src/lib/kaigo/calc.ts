@@ -122,8 +122,9 @@ export interface 計算ステップ項目 {
 /** 週N回 → 月あたりの回数（概算）。1か月 ≒ 4.345週 */
 export const 週回数から月回数 = (perWeek: number): number => Math.round(perWeek * 4.345);
 
-/** 地域単価を引く */
-export function 単価を取得(地域id: string, 人件費割合: 70 | 55 | 45): number {
+/** 地域単価を引く。人件費割合が0のサービス（福祉用具貸与など）は地域区分の影響を受けず常に10.00円 */
+export function 単価を取得(地域id: string, 人件費割合: 70 | 55 | 45 | 0): number {
+  if (人件費割合 === 0) return 10.0;
   const area = 地域区分.find((a) => a.id === 地域id) || 地域区分[地域区分.length - 1];
   return area.単価[人件費割合] ?? 10.0;
 }

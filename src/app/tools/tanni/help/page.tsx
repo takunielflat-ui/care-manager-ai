@@ -36,12 +36,20 @@ export default function TanniHelpPage() {
     <div className="flex min-h-dvh flex-col bg-zinc-50 dark:bg-black">
       <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
         <div className="mx-auto w-full max-w-xl">
-          <Link
-            href="/tools/tanni"
-            className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-          >
-            ← シミュレーターに戻る
-          </Link>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Link
+              href="/tools/tanni"
+              className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+            >
+              ← シミュレーターに戻る
+            </Link>
+            <Link
+              href="/"
+              className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
+            >
+              経過記録のトップへ
+            </Link>
+          </div>
           <h1 className="mt-3 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">使い方</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             訪問先でその場で費用を出すための、簡単なご案内です。

@@ -24,6 +24,7 @@ export default function SummarySheet({
   高額上限,
   onOpenFamily,
   onOpenPrint,
+  onOpenSave,
   onClearAll,
 }: {
   r: 計算結果;
@@ -32,6 +33,7 @@ export default function SummarySheet({
   高額上限: number | null;
   onOpenFamily: () => void;
   onOpenPrint: () => void;
+  onOpenSave: () => void;
   onClearAll: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -70,15 +72,15 @@ export default function SummarySheet({
   return (
     <>
       {toastMsg && (
-        <div className="fixed bottom-[132px] left-1/2 z-40 -translate-x-1/2 rounded-full bg-zinc-900 px-[18px] py-2.5 text-[13.5px] font-bold text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
+        <div className="fixed bottom-[160px] left-1/2 z-40 -translate-x-1/2 rounded-full bg-zinc-900 px-[18px] py-2.5 text-[13.5px] font-bold text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900">
           {toastMsg}
         </div>
       )}
       <div
-        className="fixed inset-x-0 bottom-0 z-30 flex max-h-[88vh] flex-col rounded-t-2xl bg-white shadow-[0_-4px_24px_rgba(16,40,50,0.14)] dark:bg-zinc-950"
+        className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-h-[85dvh] w-full max-w-[680px] flex-col rounded-t-2xl bg-white shadow-[0_-4px_24px_rgba(16,40,50,0.14)] dark:bg-zinc-950"
         data-band={r.帯}
       >
-        <div className="flex-none px-[18px] pt-3">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-[18px] pt-3">
           <button type="button" onClick={() => setOpen((v) => !v)} className="w-full text-left">
             <div className="mx-auto mb-2.5 h-1 w-9 rounded-full bg-zinc-200 dark:bg-zinc-700" />
             <div className="flex items-baseline gap-2.5">
@@ -140,29 +142,8 @@ export default function SummarySheet({
             ) : null}
           </button>
 
-          {rowsCount > 0 && (
-            <div className="mt-3 grid grid-cols-2 gap-2 pb-3">
-              <button
-                type="button"
-                onClick={onOpenFamily}
-                className="w-full rounded-xl bg-teal-700 py-3 text-[14px] font-bold text-white"
-              >
-                👨‍👩‍👧 家族に見せる画面
-              </button>
-              <button
-                type="button"
-                onClick={onOpenPrint}
-                className="w-full rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
-              >
-                🖨 印刷用の紙を作る
-              </button>
-            </div>
-          )}
-          <div className="pb-[env(safe-area-inset-bottom)]" />
-        </div>
-
-        {open && (
-        <div className="overflow-y-auto px-3.5 pb-3.5">
+          {open && (
+          <div className="mt-3 px-[1px] pb-1">
           {rowsCount === 0 ? (
             <div className="p-6 text-center text-sm text-zinc-500 dark:text-zinc-400">サービスを追加すると集計が出ます</div>
           ) : (
@@ -258,7 +239,36 @@ export default function SummarySheet({
               </div>
             </>
           )}
+          </div>
+          )}
         </div>
+
+        {rowsCount > 0 && (
+          <div className="flex-none border-t border-zinc-200 bg-white px-[18px] pt-2.5 pb-[calc(env(safe-area-inset-bottom)+12px)] dark:border-zinc-800 dark:bg-zinc-950">
+            <button
+              type="button"
+              onClick={onOpenSave}
+              className="w-full rounded-xl bg-teal-700 py-3 text-[14px] font-bold text-white"
+            >
+              💾 この計算を保存する
+            </button>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={onOpenFamily}
+                className="w-full rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
+              >
+                👨‍👩‍👧 家族に見せる画面
+              </button>
+              <button
+                type="button"
+                onClick={onOpenPrint}
+                className="w-full rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
+              >
+                🖨 印刷用の紙を作る
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </>

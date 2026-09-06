@@ -7,8 +7,70 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { anonymizeForAI, EMPTY_KNOWN_NAMES, type Category, type KnownNames } from "@/lib/anonymize";
 import type { GenerationMode } from "@/lib/generationMode";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const client = new Anthropic();
+
+// 無料モニター期間の使い込み対策。Anthropic APIを呼ぶ＝課金が発生するため、
+// 1ユーザーあたり1日の作成回数に上限を設ける。
+const DAILY_GENERATION_LIMIT = 10;
+
+/** UNLIMITED_GENERATION_EMAILS（カンマ区切り）に含まれるメールアドレスは上限の対象外にする */
+function isUnlimitedEmail(email: string | undefined): boolean {
+  if (!email) return false;
+  const allowed = (process.env.UNLIMITED_GENERATION_EMAILS ?? "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.includes(email.toLowerCase());
+}
+
+/** 日本時間の「今日の0時」をUTCのISO文字列で返す（generation_logのcreated_at比較用） */
+function startOfTodayInJapan(): string {
+  const parts = new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T00:00:00+09:00`;
+}
+
+/**
+ * 本日の作成回数が上限に達していないか確認し、達していなければ今回の分を記録する。
+ * 上限に達していれば、そのままクライアントへ返すエラーレスポンスを返す。
+ */
+async function checkAndRecordGenerationLimit(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Response | null> {
+  const { count, error: countError } = await supabase
+    .from("generation_log")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .gte("created_at", startOfTodayInJapan());
+
+  if (countError) {
+    console.error("Failed to count generation_log:", countError);
+    // 集計に失敗しても生成自体は止めない（上限管理より機能提供を優先）
+  } else if ((count ?? 0) >= DAILY_GENERATION_LIMIT) {
+    return Response.json(
+      {
+        error: `本日の作成回数の上限（${DAILY_GENERATION_LIMIT}回）に達しました。日付が変わると再度ご利用いただけます。`,
+      },
+      { status: 429 },
+    );
+  }
+
+  const { error: insertError } = await supabase.from("generation_log").insert({ user_id: userId });
+  if (insertError) {
+    console.error("Failed to insert generation_log:", insertError);
+  }
+
+  return null;
+}
 
 type ClientPayload = {
   visitDate?: string;
@@ -72,6 +134,11 @@ export async function POST(request: Request) {
       { error: "サーバーに ANTHROPIC_API_KEY が設定されていません。" },
       { status: 500 },
     );
+  }
+
+  if (!isUnlimitedEmail(user.email)) {
+    const limitError = await checkAndRecordGenerationLimit(supabase, user.id);
+    if (limitError) return limitError;
   }
 
   // ユーザーごとの匿名化辞書（語尾のない固有名詞）を取得する。RLSにより自分の分だけ返る。

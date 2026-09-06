@@ -81,3 +81,62 @@ create policy "insert own known_names"
 create policy "delete own known_names"
   on public.known_names for delete
   using (auth.uid() = user_id);
+
+-- care-manager-ai: tanni_plans テーブルとRLSポリシー
+-- 単位数シミュレーター（/tools/tanni）の「保存」機能で使う。
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+create table public.tanni_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  state jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index tanni_plans_user_updated_idx
+  on public.tanni_plans (user_id, updated_at desc);
+
+create trigger set_tanni_plans_updated_at
+  before update on public.tanni_plans
+  for each row
+  execute function public.set_updated_at();
+
+alter table public.tanni_plans enable row level security;
+
+create policy "select own tanni_plans"
+  on public.tanni_plans for select
+  using (auth.uid() = user_id);
+
+create policy "insert own tanni_plans"
+  on public.tanni_plans for insert
+  with check (auth.uid() = user_id);
+
+create policy "delete own tanni_plans"
+  on public.tanni_plans for delete
+  using (auth.uid() = user_id);
+
+-- care-manager-ai: generation_log テーブルとRLSポリシー
+-- /api/generate（Anthropic APIを呼ぶ＝課金が発生する処理）の1日あたりの
+-- 利用回数を数えるための記録用テーブル。無料モニター期間の使い込み対策。
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+create table public.generation_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+create index generation_log_user_created_idx
+  on public.generation_log (user_id, created_at desc);
+
+alter table public.generation_log enable row level security;
+
+create policy "select own generation_log"
+  on public.generation_log for select
+  using (auth.uid() = user_id);
+
+create policy "insert own generation_log"
+  on public.generation_log for insert
+  with check (auth.uid() = user_id);

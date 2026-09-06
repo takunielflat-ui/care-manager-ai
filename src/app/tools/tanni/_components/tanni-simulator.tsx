@@ -19,6 +19,7 @@ import SummarySheet from "./summary-sheet";
 import FamilyDialog from "./family-dialog";
 import PrintDialog from "./print-dialog";
 import JigyoshoDialog from "./jigyosho-dialog";
+import SavePlanDialog, { type TanniPlanState } from "./save-plan-dialog";
 import {
   applyJigyosho,
   loadCond,
@@ -68,6 +69,7 @@ export default function TanniSimulator() {
   const [famOpen, setFamOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);
   const [jigyoshoOpen, setJigyoshoOpen] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
 
   const 高額上限 = useMemo(
     () => 高額介護サービス費.find((k) => k.id === state.高額区分)?.上限 ?? null,
@@ -146,6 +148,24 @@ export default function TanniSimulator() {
     }));
   const clearAllRows = () => setState((s) => ({ ...s, rows: [] }));
 
+  const loadPlan = (plan: TanniPlanState) =>
+    setState((s) => {
+      const next = {
+        ...s,
+        要介護度: plan.要介護度,
+        地域区分: plan.地域区分,
+        負担割合: plan.負担割合,
+        高額区分: plan.高額区分,
+        負担限度額段階: plan.負担限度額段階,
+        印刷作成者: plan.印刷作成者,
+        印刷名: plan.印刷名,
+        rows: plan.rows,
+        seq: Math.max(s.seq, ...plan.rows.map((r) => r.id + 1)),
+      };
+      saveCond(next);
+      return next;
+    });
+
   const openJigyoshoDialog = () => setJigyoshoOpen(true);
   const addJigyosho = () =>
     setState((s) => ({
@@ -192,6 +212,13 @@ export default function TanniSimulator() {
 
       <div className="tanni-app-chrome">
         <header className="sticky top-0 z-20 flex items-center gap-2.5 bg-teal-800 px-4 pt-[calc(10px+env(safe-area-inset-top))] pb-2.5 text-white">
+          <Link
+            href="/"
+            aria-label="経過記録の入力画面へ戻る"
+            className="shrink-0 flex items-center gap-1 rounded-full bg-white/15 px-3 py-2 text-[13px] font-bold"
+          >
+            ← 経過記録
+          </Link>
           <div className="flex-1">
             <h1 className="text-[17px] font-bold tracking-tight">単位数シミュレーター</h1>
             <span className="block text-[11px] opacity-85">訪問先で、その場で費用を出す</span>
@@ -336,6 +363,7 @@ export default function TanniSimulator() {
           高額上限={高額上限}
           onOpenFamily={() => setFamOpen(true)}
           onOpenPrint={() => setPrintOpen(true)}
+          onOpenSave={() => setSaveOpen(true)}
           onClearAll={clearAllRows}
         />
       </div>
@@ -370,6 +398,21 @@ export default function TanniSimulator() {
         onUpdate={updateJigyosho}
         onRemove={removeJigyosho}
         onToggleOpen={toggleJigyoshoOpen}
+      />
+      <SavePlanDialog
+        open={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        currentState={{
+          要介護度: state.要介護度,
+          地域区分: state.地域区分,
+          負担割合: state.負担割合,
+          高額区分: state.高額区分,
+          負担限度額段階: state.負担限度額段階,
+          印刷作成者: state.印刷作成者,
+          印刷名: state.印刷名,
+          rows: state.rows,
+        }}
+        onLoad={loadPlan}
       />
     </div>
   );
