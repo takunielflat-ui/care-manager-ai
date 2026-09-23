@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 export type VisitRecord = {
@@ -20,6 +21,14 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: "copied", label: "コピー済み" },
 ];
 
+const ALL_VALUE = "all";
+
+// 削除後、この時間だけ「元に戻す」を表示する
+const UNDO_TIMEOUT_MS = 6000;
+
+const SELECT_CLASS =
+  "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition-colors focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
+
 /** 保存されている YYYY-MM-DD を「YYYY年M月D日」に整形する。 */
 function formatVisitDate(value: string) {
   const [year, month, day] = value.split("-");
@@ -27,10 +36,44 @@ function formatVisitDate(value: string) {
   return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
-export default function RecordsList({ initialRecords }: { initialRecords: VisitRecord[] }) {
+/** YYYY-MM-DD から YYYY-MM を取り出す。 */
+function toYearMonth(value: string) {
+  const [year, month] = value.split("-");
+  if (!year || !month) return "";
+  return `${year}-${month}`;
+}
+
+/** YYYY-MM を「YYYY年M月」に整形する。 */
+function formatYearMonth(value: string) {
+  const [year, month] = value.split("-");
+  if (!year || !month) return value;
+  return `${year}年${Number(month)}月`;
+}
+
+function buildQueryString(client: string, month: string) {
+  const params = new URLSearchParams();
+  if (client !== ALL_VALUE) params.set("client", client);
+  if (month !== ALL_VALUE) params.set("month", month);
+  return params.toString();
+}
+
+export default function RecordsList({
+  initialRecords,
+  initialClient,
+  initialMonth,
+}: {
+  initialRecords: VisitRecord[];
+  initialClient: string;
+  initialMonth: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [records, setRecords] = useState(initialRecords);
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
+  const [clientFilter, setClientFilter] = useState(initialClient);
+  const [monthFilter, setMonthFilter] = useState(initialMonth);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [pendingUpdateId, setPendingUpdateId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -42,6 +85,19 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [undoState, setUndoState] = useState<{ ids: string[]; records: VisitRecord[] } | null>(
+    null,
+  );
+
+  // 絞り込み(利用者・年月)の選択状態をURLクエリへ反映する。リロード・ブラウザバックでも保たれる。
+  useEffect(() => {
+    const query = buildQueryString(clientFilter, monthFilter);
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [clientFilter, monthFilter, pathname, router]);
+
   // コピー完了の表示は少し置いてから元に戻す
   useEffect(() => {
     if (copiedId === null) return;
@@ -49,10 +105,31 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
     return () => clearTimeout(timer);
   }, [copiedId]);
 
+  // 「元に戻す」は一定時間で消す
+  useEffect(() => {
+    if (undoState === null) return;
+    const timer = setTimeout(() => setUndoState(null), UNDO_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [undoState]);
+
+  const clientOptions = useMemo(() => {
+    const names = new Set(records.map((record) => record.display_name));
+    return Array.from(names).sort((a, b) => a.localeCompare(b, "ja"));
+  }, [records]);
+
+  const monthOptions = useMemo(() => {
+    const months = new Set(records.map((record) => toYearMonth(record.visit_date)));
+    return Array.from(months)
+      .filter(Boolean)
+      .sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  }, [records]);
+
   const visibleRecords = useMemo(() => {
     const query = search.trim().toLowerCase();
     return records.filter((record) => {
       if (filter !== "all" && record.status !== filter) return false;
+      if (clientFilter !== ALL_VALUE && record.display_name !== clientFilter) return false;
+      if (monthFilter !== ALL_VALUE && toYearMonth(record.visit_date) !== monthFilter) return false;
       if (query === "") return true;
       return (
         record.display_name.toLowerCase().includes(query) ||
@@ -60,7 +137,44 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
         record.generated_text.toLowerCase().includes(query)
       );
     });
-  }, [records, filter, search]);
+  }, [records, filter, search, clientFilter, monthFilter]);
+
+  const visibleSelectableIds = useMemo(
+    () => visibleRecords.map((record) => record.id),
+    [visibleRecords],
+  );
+  const isAllVisibleSelected =
+    visibleSelectableIds.length > 0 &&
+    visibleSelectableIds.every((id) => selectedIds.has(id));
+
+  function toggleSelectionMode() {
+    setSelectionMode((current) => !current);
+    setSelectedIds(new Set());
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (isAllVisibleSelected) {
+        for (const id of visibleSelectableIds) next.delete(id);
+      } else {
+        for (const id of visibleSelectableIds) next.add(id);
+      }
+      return next;
+    });
+  }
 
   function startEdit(record: VisitRecord) {
     setEditingId(record.id);
@@ -131,6 +245,71 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
     }
   }
 
+  async function handleBulkDelete() {
+    if (isBulkDeleting || selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+
+    if (!window.confirm(`選択した${ids.length}件を削除します。よろしいですか？`)) return;
+
+    setIsBulkDeleting(true);
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/records/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+
+      const data: { ids?: string[]; error?: string } = await response.json().catch(() => ({}));
+
+      if (!response.ok || !data.ids) {
+        setErrorMessage(data.error ?? "記録の削除に失敗しました。");
+        return;
+      }
+
+      const deletedIds = new Set(data.ids);
+      const deletedRecords = records.filter((record) => deletedIds.has(record.id));
+
+      setRecords((current) => current.filter((record) => !deletedIds.has(record.id)));
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      setUndoState({ ids: data.ids, records: deletedRecords });
+    } catch {
+      setErrorMessage("通信に失敗しました。もう一度お試しください。");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  }
+
+  async function handleUndo() {
+    if (undoState === null) return;
+    const { ids, records: restoredRecords } = undoState;
+
+    setUndoState(null);
+    setErrorMessage("");
+
+    try {
+      const response = await fetch("/api/records/bulk-restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+
+      if (!response.ok) {
+        const data: { error?: string } = await response.json().catch(() => ({}));
+        setErrorMessage(data.error ?? "記録の復元に失敗しました。");
+        return;
+      }
+
+      setRecords((current) =>
+        [...current, ...restoredRecords].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
+      );
+    } catch {
+      setErrorMessage("通信に失敗しました。もう一度お試しください。");
+    }
+  }
+
   async function toggleStatus(record: VisitRecord) {
     if (pendingUpdateId) return;
 
@@ -174,6 +353,46 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-1 flex-col gap-1.5">
+          <label htmlFor="client-filter" className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            利用者
+          </label>
+          <select
+            id="client-filter"
+            value={clientFilter}
+            onChange={(event) => setClientFilter(event.target.value)}
+            className={SELECT_CLASS}
+          >
+            <option value={ALL_VALUE}>すべて</option>
+            {clientOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-1 flex-col gap-1.5">
+          <label htmlFor="month-filter" className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            年月
+          </label>
+          <select
+            id="month-filter"
+            value={monthFilter}
+            onChange={(event) => setMonthFilter(event.target.value)}
+            className={SELECT_CLASS}
+          >
+            <option value={ALL_VALUE}>すべて</option>
+            {monthOptions.map((yearMonth) => (
+              <option key={yearMonth} value={yearMonth}>
+                {formatYearMonth(yearMonth)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <input
         type="search"
         value={search}
@@ -182,22 +401,80 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
         className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
       />
 
-      <div className="flex gap-2">
-        {FILTERS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setFilter(item.value)}
-            className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-              filter === item.value
-                ? "border-teal-600 bg-teal-600 text-white"
-                : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {FILTERS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setFilter(item.value)}
+              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                filter === item.value
+                  ? "border-teal-600 bg-teal-600 text-white"
+                  : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={toggleSelectionMode}
+          className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            selectionMode
+              ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+              : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          }`}
+        >
+          {selectionMode ? "選択をやめる" : "選択して削除"}
+        </button>
       </div>
+
+      {selectionMode && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-3 py-3 dark:border-zinc-800 dark:bg-zinc-950">
+          <label className="flex items-center gap-2.5 text-sm text-zinc-700 dark:text-zinc-200">
+            <input
+              type="checkbox"
+              checked={isAllVisibleSelected}
+              onChange={toggleSelectAllVisible}
+              disabled={visibleSelectableIds.length === 0}
+              className="size-5"
+            />
+            すべて選択（表示中 {visibleSelectableIds.length}件）
+          </label>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-zinc-600 dark:text-zinc-300">
+              {selectedIds.size}件選択中
+            </span>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              disabled={selectedIds.size === 0 || isBulkDeleting}
+              className="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              {isBulkDeleting ? "削除中..." : `選択した${selectedIds.size}件を削除`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {undoState !== null && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-900 px-4 py-3 text-sm text-white shadow-lg dark:border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          <span>{undoState.ids.length}件を削除しました</span>
+          <button
+            type="button"
+            onClick={handleUndo}
+            className="shrink-0 font-medium underline-offset-2 hover:underline"
+          >
+            元に戻す
+          </button>
+        </div>
+      )}
 
       {errorMessage !== "" && (
         <p
@@ -210,13 +487,16 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
 
       {visibleRecords.length === 0 ? (
         <p className="rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-          該当する記録がありません。
+          {records.length === 0
+            ? "保存された記録がありません。"
+            : "条件に一致する記録がありません。絞り込み条件を変えてみてください。"}
         </p>
       ) : (
         <ul className="flex flex-col gap-3">
           {visibleRecords.map((record) => {
             const isExpanded = expandedId === record.id;
             const isCopied = record.status === "copied";
+            const isSelected = selectedIds.has(record.id);
 
             return (
               <li
@@ -224,9 +504,22 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
                 className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
               >
                 <div className="flex items-start justify-between gap-3">
+                  {selectionMode && (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelected(record.id)}
+                      aria-label={`${record.display_name}を選択`}
+                      className="mt-1 size-5 shrink-0"
+                    />
+                  )}
                   <button
                     type="button"
-                    onClick={() => setExpandedId(isExpanded ? null : record.id)}
+                    onClick={() =>
+                      selectionMode
+                        ? toggleSelected(record.id)
+                        : setExpandedId(isExpanded ? null : record.id)
+                    }
                     className="flex-1 text-left"
                   >
                     <p className="font-medium text-zinc-900 dark:text-zinc-50">
@@ -247,7 +540,7 @@ export default function RecordsList({ initialRecords }: { initialRecords: VisitR
                   </span>
                 </div>
 
-                {isExpanded && (
+                {isExpanded && !selectionMode && (
                   <div className="mt-3 flex flex-col gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
                     {editingId === record.id ? (
                       <>
