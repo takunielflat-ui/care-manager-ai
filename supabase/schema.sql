@@ -176,3 +176,18 @@ create policy "update own canned_phrases"
 create policy "delete own canned_phrases"
   on public.canned_phrases for delete
   using (auth.uid() = user_id);
+
+-- care-manager-ai: visit_records への論理削除（deleted_at）追加
+-- 第5表は開示請求・運営指導の対象になる記録のため、一覧からの一括削除は
+-- 物理削除ではなく deleted_at を立てるだけの論理削除にする。
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+alter table public.visit_records
+  add column if not exists deleted_at timestamptz;
+
+-- 一覧は常に deleted_at is null で絞り込むため、その形での検索を高速化する。
+create index if not exists visit_records_user_created_active_idx
+  on public.visit_records (user_id, created_at desc)
+  where deleted_at is null;
+
+-- RLS ポリシーは user_id ベースのままで deleted_at の影響を受けないため変更不要。

@@ -6,11 +6,18 @@ import RecordsList, { type VisitRecord } from "./_components/records-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function RecordsPage() {
+export default async function RecordsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ client?: string; month?: string }>;
+}) {
+  const { client, month } = await searchParams;
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("visit_records")
     .select("id, visit_date, display_name, note, generated_text, status, created_at")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -56,7 +63,11 @@ export default async function RecordsPage() {
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 py-6">
-        <RecordsList initialRecords={records} />
+        <RecordsList
+          initialRecords={records}
+          initialClient={client ?? "all"}
+          initialMonth={month ?? "all"}
+        />
       </main>
     </div>
   );

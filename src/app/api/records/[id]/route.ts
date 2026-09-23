@@ -52,7 +52,11 @@ export async function PATCH(
     return Response.json({ error: "更新する項目がありません。" }, { status: 400 });
   }
 
-  const { error } = await supabase.from("visit_records").update(updates).eq("id", id);
+  const { error } = await supabase
+    .from("visit_records")
+    .update(updates)
+    .eq("id", id)
+    .is("deleted_at", null);
 
   if (error) {
     console.error("Failed to update visit_records:", error);
@@ -77,7 +81,12 @@ export async function DELETE(
     return Response.json({ error: "ログインが必要です。" }, { status: 401 });
   }
 
-  const { error } = await supabase.from("visit_records").delete().eq("id", id);
+  // 開示請求・運営指導の対象になりうる記録のため、物理削除ではなく論理削除にする。
+  const { error } = await supabase
+    .from("visit_records")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("deleted_at", null);
 
   if (error) {
     console.error("Failed to delete visit_records:", error);
