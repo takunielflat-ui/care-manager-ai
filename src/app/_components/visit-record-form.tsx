@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import type { GenerationMode } from "@/lib/generationMode";
 
+export type CannedPhrase = {
+  id: string;
+  body: string;
+};
+
 const FIELD_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-3 text-base text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20 disabled:bg-zinc-100 disabled:text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:disabled:bg-zinc-800";
 
@@ -13,8 +18,10 @@ const DRAFT_KEY = "care-manager-ai:visit-record-draft";
 
 export default function VisitRecordForm({
   defaultVisitDate,
+  cannedPhrases,
 }: {
   defaultVisitDate: string;
+  cannedPhrases: CannedPhrase[];
 }) {
   const [visitDate, setVisitDate] = useState(defaultVisitDate);
   const [displayName, setDisplayName] = useState("");
@@ -31,6 +38,10 @@ export default function VisitRecordForm({
   const [saveErrorMessage, setSaveErrorMessage] = useState("");
   const [showSavedToast, setShowSavedToast] = useState(false);
   const resultRef = useRef<HTMLElement>(null);
+
+  // チェックした定型文は生成完了後にテキスト末尾へ連結するだけで、AIには渡さない。
+  // 生成のたびにリセットし、前回チェックした内容を次の記録へ引きずらないようにする。
+  const [checkedPhraseIds, setCheckedPhraseIds] = useState<Set<string>>(new Set());
 
   // 画面は常に空の状態で開く。下書きは自動では読み込まず、存在を検知するだけにする
   // （読み込むかどうかは「前回の下書きを復元」リンク経由でユーザーに選んでもらう）。
@@ -113,6 +124,13 @@ export default function VisitRecordForm({
   async function handleGenerate(targetMode: GenerationMode) {
     if (isGenerating) return;
 
+    // この回でテキストに連結する定型文を確定し、チェックはすぐに外す
+    // （次の生成に前回のチェックを引きずらないため）。
+    const selectedPhraseBodies = cannedPhrases
+      .filter((phrase) => checkedPhraseIds.has(phrase.id))
+      .map((phrase) => phrase.body);
+    setCheckedPhraseIds(new Set());
+
     setMode(targetMode);
     setIsGenerating(true);
     setErrorMessage("");
@@ -164,6 +182,13 @@ export default function VisitRecordForm({
         for (const line of lines) consumeLine(line);
       }
       consumeLine(buffer);
+
+      // ストリーミング完了後、チェックした定型文をテキストとして末尾に連結する。
+      // AIの生成には一切関与させない（単純な文字列結合のみ）。
+      if (text !== "" && selectedPhraseBodies.length > 0) {
+        text = [text, ...selectedPhraseBodies].join("\n");
+        setResult(text);
+      }
 
       if (text === "") {
         setErrorMessage((current) =>
@@ -308,6 +333,39 @@ export default function VisitRecordForm({
           className={`${FIELD_CLASS} min-h-[55vh] resize-y leading-relaxed sm:min-h-[24rem]`}
         />
       </div>
+
+      {cannedPhrases.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className={LABEL_CLASS}>
+            定型文を追加（チェックすると生成結果の末尾に追加されます）
+          </p>
+          <ul className="flex flex-col gap-1.5 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+            {cannedPhrases.map((phrase) => (
+              <li key={phrase.id}>
+                <label className="flex items-start gap-2.5 py-1 text-sm text-zinc-700 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={checkedPhraseIds.has(phrase.id)}
+                    onChange={(event) => {
+                      setCheckedPhraseIds((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) {
+                          next.add(phrase.id);
+                        } else {
+                          next.delete(phrase.id);
+                        }
+                        return next;
+                      });
+                    }}
+                    className="mt-0.5 size-5 shrink-0"
+                  />
+                  <span className="whitespace-pre-wrap">{phrase.body}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {errorMessage !== "" && (
         <p
