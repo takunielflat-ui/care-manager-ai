@@ -141,6 +141,42 @@ create policy "insert own generation_log"
   on public.generation_log for insert
   with check (auth.uid() = user_id);
 
+-- care-manager-ai: canned_phrases テーブルとRLSポリシー
+-- 運営指導向けの定型文（例: 「自宅訪問し、本人と面談した」）をユーザーが自分で登録し、
+-- 生成結果の末尾にチェックボックスで挿入するための辞書。AIには一切渡さない
+-- （src/app/api/generate/route.ts はこのテーブルを参照しない）。
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+create table public.canned_phrases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  body text not null,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index canned_phrases_user_sort_idx
+  on public.canned_phrases (user_id, sort_order, created_at);
+
+alter table public.canned_phrases enable row level security;
+
+create policy "select own canned_phrases"
+  on public.canned_phrases for select
+  using (auth.uid() = user_id);
+
+create policy "insert own canned_phrases"
+  on public.canned_phrases for insert
+  with check (auth.uid() = user_id);
+
+create policy "update own canned_phrases"
+  on public.canned_phrases for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "delete own canned_phrases"
+  on public.canned_phrases for delete
+  using (auth.uid() = user_id);
+
 -- care-manager-ai: visit_records への論理削除（deleted_at）追加
 -- 第5表は開示請求・運営指導の対象になる記録のため、一覧からの一括削除は
 -- 物理削除ではなく deleted_at を立てるだけの論理削除にする。

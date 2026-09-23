@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 
+import { createClient } from "@/lib/supabase/server";
 import LogoutButton from "./_components/logout-button";
 import VisitRecordForm from "./_components/visit-record-form";
 
@@ -30,6 +31,18 @@ export default async function Home() {
   // ヘッダー経由で受け取るだけにし、supabase.auth.getUser() の二重呼び出しを避ける。
   const headersList = await headers();
   const userEmail = headersList.get("x-user-email");
+
+  // 定型文はAIに一切渡さず、生成結果への文字列連結にのみ使う（src/app/api/generate/route.ts は参照しない）。
+  const supabase = await createClient();
+  const { data: cannedPhrasesData, error: cannedPhrasesError } = await supabase
+    .from("canned_phrases")
+    .select("id, body, sort_order, created_at")
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (cannedPhrasesError) {
+    console.error("Failed to fetch canned_phrases:", cannedPhrasesError);
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
@@ -75,7 +88,10 @@ export default async function Home() {
       </header>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 py-6">
-        <VisitRecordForm defaultVisitDate={todayInJapan()} />
+        <VisitRecordForm
+          defaultVisitDate={todayInJapan()}
+          cannedPhrases={cannedPhrasesData ?? []}
+        />
       </main>
     </div>
   );
