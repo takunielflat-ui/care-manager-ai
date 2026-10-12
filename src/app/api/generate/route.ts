@@ -5,6 +5,7 @@ import {
   getFifthSheetSystemPrompt,
 } from "@/prompts/fifthSheetPrompt";
 import { createClient } from "@/lib/supabase/server";
+import { hasAppAccess, isUnlimitedEmail } from "@/lib/access";
 import { anonymizeForAI, EMPTY_KNOWN_NAMES, type Category, type KnownNames } from "@/lib/anonymize";
 import type { GenerationMode } from "@/lib/generationMode";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -14,16 +15,6 @@ const client = new Anthropic();
 // 無料モニター期間の使い込み対策。Anthropic APIを呼ぶ＝課金が発生するため、
 // 1ユーザーあたり1日の作成回数に上限を設ける。
 const DAILY_GENERATION_LIMIT = 10;
-
-/** UNLIMITED_GENERATION_EMAILS（カンマ区切り）に含まれるメールアドレスは上限の対象外にする */
-function isUnlimitedEmail(email: string | undefined): boolean {
-  if (!email) return false;
-  const allowed = (process.env.UNLIMITED_GENERATION_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  return allowed.includes(email.toLowerCase());
-}
 
 /** 日本時間の「今日の0時」をUTCのISO文字列で返す（generation_logのcreated_at比較用） */
 function startOfTodayInJapan(): string {
@@ -106,6 +97,14 @@ export async function POST(request: Request) {
 
   if (!user) {
     return Response.json({ error: "ログインが必要です。" }, { status: 401 });
+  }
+
+  // 無料モニター期間中は、許可したメールアドレスだけが生成（＝課金）を使える
+  if (!(await hasAppAccess(supabase, user.email))) {
+    return Response.json(
+      { error: "現在は無料モニターの方だけがご利用いただけます。" },
+      { status: 403 },
+    );
   }
 
   let body: ClientPayload;
