@@ -1,7 +1,12 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { hasAppAccess } from "@/lib/access";
+
 const PUBLIC_PATHS = ["/login"];
+
+/** 許可されていないアカウントに見せる案内ページ */
+const NO_ACCESS_PATH = "/no-access";
 
 /** ログイン不要で公開するツール群。配下のパスもまとめて対象外にする。 */
 const PUBLIC_PATH_PREFIXES = ["/tools/tanni"];
@@ -57,6 +62,19 @@ export async function proxy(request: NextRequest) {
 
   if (user && isPublicPath) {
     return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  // 無料モニター期間中は、許可していないアカウントを案内ページへ回す。
+  // 許可済みの人が案内ページを開いた場合はトップへ戻す。
+  if (user) {
+    const isNoAccessPath = request.nextUrl.pathname === NO_ACCESS_PATH;
+    const allowed = await hasAppAccess(supabase, user.email);
+    if (!allowed && !isNoAccessPath) {
+      return NextResponse.redirect(new URL(NO_ACCESS_PATH, request.url));
+    }
+    if (allowed && isNoAccessPath) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
   }
 
   if (user?.email) {

@@ -191,3 +191,36 @@ create index if not exists visit_records_user_created_active_idx
   where deleted_at is null;
 
 -- RLS ポリシーは user_id ベースのままで deleted_at の影響を受けないため変更不要。
+
+-- care-manager-ai: allowed_emails テーブルとRLSポリシー
+-- 無料モニター期間中、アプリを使えるメールアドレスの一覧。URLを知っていれば誰でも
+-- 登録できてしまうため、ここに登録した人だけが記録の作成（Anthropic APIの課金）を使える
+-- （判定は src/lib/access.ts、振り分けは src/proxy.ts）。
+-- UNLIMITED_GENERATION_EMAILS の運営者アドレスは、ここに無くても常に使える。
+-- 行の追加・削除は Supabase の Table Editor から行う。
+--   email      … 小文字で入れる（大文字小文字は区別せずに照合する）
+--   expires_at … 利用期限。空欄なら無期限、過ぎると使えなくなる
+--   note       … メモ（Threadsのアカウント名など。任意）
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+create table public.allowed_emails (
+  email text primary key,
+  expires_at timestamptz,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.allowed_emails enable row level security;
+
+-- 自分のメールアドレスの行だけ読める（他の人が登録されているかは分からない）。
+-- 追加・変更・削除のポリシーは作らない＝アプリからは書き込めず、運営者がTable Editorで管理する。
+create policy "select own allowed_email"
+  on public.allowed_emails for select
+  using (lower(email) = lower(auth.jwt() ->> 'email'));
+
+-- この仕組みを入れる前から使っている人は、締め出さないよう無期限で登録しておく
+insert into public.allowed_emails (email, note)
+select lower(email), '既存ユーザー'
+from auth.users
+where email is not null
+on conflict (email) do nothing;
