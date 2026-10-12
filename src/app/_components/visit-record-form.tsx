@@ -313,7 +313,7 @@ export default function VisitRecordForm({
           className={FIELD_CLASS}
         />
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          実名で入力して構いません。AIへの送信時は自動的に匿名化されます。
+          利用者・家族の実名や病院名は入れず、イニシャル等で入力してください。万一実名が入っても、AIへの送信時は自動で伏せ字にします（すべてを拾えるとは限りません）。
         </p>
       </div>
 
