@@ -84,7 +84,7 @@ export default async function HelpPage() {
               <Link href="/" className="text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
                 新しい記録を作成
               </Link>
-              ）で、訪問日・利用者名・訪問メモを入力します。利用者名やメモは実名のまま入力して構いません。
+              ）で、訪問日・利用者名・訪問メモを入力します。利用者・家族の名前や病院名は、実名ではなくイニシャル等で入力してください（例：A様、長女）。
               入力中の内容は自動で一時保存されるので、途中で画面を閉じても「前回の下書きを復元」から続きを入力できます。
             </StepCard>
             <StepCard step={2} title="「⚡ 簡潔」または「📄 詳細」をタップする">

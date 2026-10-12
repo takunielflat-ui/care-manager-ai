@@ -48,10 +48,12 @@ function entityPattern(suffixAlternation: string, min: number, max: number) {
 }
 
 const RULES: Rule[] = [
-  // 人名: 「様」「さん」「氏」が付く2〜4文字の氏名を対象にする
+  // 人名: 「様」「さん」「氏」「ちゃん」が付く氏名を対象にする。
+  // 漢字1〜4文字（「林さん」のような1文字の姓も含む）と、カタカナ2〜6文字（「トメさん」等）。
+  // 「様子」「様式」「氏名」のように敬称ではない「様」「氏」は後ろの文字で除外する。
   {
     category: "person",
-    pattern: /([一-龥]{2,4})(様|さん|氏)/g,
+    pattern: /([一-龥]{1,4}|[ァ-ヶー]{2,6})(様(?![々子式相態])|さん|氏(?!名)|ちゃん)/g,
     placeholderSuffix: "様",
     nextPrefix: letterForIndex,
   },
@@ -107,7 +109,64 @@ const NON_PERSON_WORDS = new Set([
   "主治医", "担当医", "医師", "看護師", "薬剤師", "理学療法士", "作業療法士",
   "言語聴覚士", "相談員", "職員", "担当者", "施設長", "管理者", "責任者",
   "事務員", "訪問員", "介護士", "支援員", "患者", "利用者", "家族",
+  "医者", "歯医者", "保健師", "栄養士", "社会福祉士", "介護福祉士", "相談支援専門員",
+  // 1文字で「〜さん/様」になる一般語（1文字の姓を拾うようにしたため除外が必要）
+  "皆", "奥", "嫁", "婆", "爺", "客", "神", "仏", "王", "殿", "赤", "坊", "嬢", "旦那", "大家",
+  // カタカナの職種・呼び方
+  "ヘルパー", "ケアマネ", "ケアマネジャー", "ケアマネージャー", "マネジャー", "マネージャー",
+  "ナース", "ドクター", "スタッフ", "ドライバー", "セラピスト", "リハ", "ママ", "パパ",
 ]);
+
+/**
+ * 「同様」「多様」のように、直前の1文字と合わせて一般語になる「様」「氏」。
+ * 人名パターンは前の漢字を最大4文字まで取り込むため（「前回同様」→「前回同」+「様」）、
+ * 末尾の1文字＋敬称の組み合わせで判定して除外する。
+ */
+const NON_PERSON_TAILS = new Set([
+  "同様", "多様", "模様", "異様", "仕様", "左様", "斯様",
+  "同氏", "両氏", "某氏", "彼氏", "諸氏",
+]);
+
+/**
+ * 人名パターンにマッチした識別部分が、実際には人名でない場合は true。
+ * 「訪問看護師さん」のように職種の前に別の漢字が付いて4文字を超える場合も、
+ * 末尾が職種・続柄の語であれば人名ではないと判断する。
+ */
+function isNonPersonName(name: string, honorific: string) {
+  if (NON_PERSON_TAILS.has(name.slice(-1) + honorific)) return true;
+  for (const word of NON_PERSON_WORDS) {
+    if (name === word) return true;
+    if (word.length >= 2 && name.endsWith(word)) return true;
+  }
+  return false;
+}
+
+/**
+ * 「長女恵子さん」のように続柄・職種の直後に名前が続く場合、その続柄部分を返す。
+ * 続柄は残して名前だけを伏せることで、AIが「誰の発言か」を書き分けられるようにする。
+ */
+function leadingNonPersonWord(name: string) {
+  let longest = "";
+  for (const word of NON_PERSON_WORDS) {
+    if (word.length >= 2 && name.startsWith(word) && name.length > word.length && word.length > longest.length) {
+      longest = word;
+    }
+  }
+  return longest;
+}
+
+/**
+ * 電話番号・郵便番号。人名と違ってラベルで区別する必要がないため、種類だけを残す。
+ * 日付（2026-10-12）や数値（体温36.5）に当たらないよう、先頭の0や〒で限定する。
+ */
+const CONTACT_PATTERNS: { pattern: RegExp; replacement: string }[] = [
+  { pattern: /〒\s?\d{3}[-－‐ー]?\d{4}/g, replacement: "（郵便番号）" },
+  { pattern: /(?<!\d)0\d{1,4}[-－‐ー]\d{1,4}[-－‐ー]\d{3,4}(?!\d)/g, replacement: "（電話番号）" },
+  { pattern: /(?<!\d)0\d{9,10}(?!\d)/g, replacement: "（電話番号）" },
+];
+
+/** 漢字・ひらがな・カタカナを含むか（イニシャルなど英字だけの表示名は本文から探さない） */
+const HAS_JAPANESE = /[一-龥ぁ-んァ-ヶ]/;
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -163,9 +222,33 @@ export function anonymizeForAI(
 
   let anonymizedNote = input.note;
 
+  for (const { pattern, replacement } of CONTACT_PATTERNS) {
+    anonymizedNote = anonymizedNote.replace(pattern, replacement);
+  }
+
+  // 利用者表示名そのものを本文からも探して伏せる。敬称が付いていない書き方
+  // （「山田花子 本人宅訪問」「花子は笑顔」）は人名パターンでは拾えないため。
+  // 姓・名に分かれていれば、それぞれ（2文字以上のもの）も同じラベルに置き換える。
+  if (primaryPersonName && HAS_JAPANESE.test(primaryPersonName)) {
+    const label = resolvePerson(primaryPersonName);
+    const variants = new Set([primaryPersonName, primaryPersonName.replace(/\s+/g, "")]);
+    for (const part of primaryPersonName.split(/\s+/)) {
+      if (part.length >= 2 && HAS_JAPANESE.test(part)) variants.add(part);
+    }
+    // 長い表記から先に置き換える（「山田花子」を「山田」より先に処理する）
+    for (const variant of [...variants].sort((a, b) => b.length - a.length)) {
+      const literalPattern = new RegExp(`${escapeRegExp(variant)}(?:様|さん|氏|ちゃん)?`, "g");
+      anonymizedNote = anonymizedNote.replace(literalPattern, label);
+    }
+  }
+
   for (const rule of RULES) {
     anonymizedNote = anonymizedNote.replace(rule.pattern, (match, name: string, typeWord: string) => {
-      if (rule.category === "person" && NON_PERSON_WORDS.has(name)) return match;
+      if (rule.category === "person") {
+        if (isNonPersonName(name, typeWord)) return match;
+        const prefix = leadingNonPersonWord(name);
+        if (prefix) return prefix + resolvePerson(name.slice(prefix.length));
+      }
       const suffix = rule.placeholderSuffix ?? typeWord;
       return registries[rule.category].resolve(
         name,
