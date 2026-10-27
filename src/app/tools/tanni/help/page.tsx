@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import TopLink from "../_components/top-link";
+
 export const metadata: Metadata = {
   title: "使い方｜介護サービス 単位数・自己負担シミュレーター",
   description: "単位数シミュレーターの使い方をご案内します。",
@@ -43,12 +45,7 @@ export default function TanniHelpPage() {
             >
               ← シミュレーターに戻る
             </Link>
-            <Link
-              href="/"
-              className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-            >
-              経過記録のトップへ
-            </Link>
+            <TopLink className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400" />
           </div>
           <h1 className="mt-3 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">使い方</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">

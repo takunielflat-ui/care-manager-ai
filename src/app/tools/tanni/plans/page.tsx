@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import TanniPlansView from "../_components/tanni-plans-view";
+import TopLink from "../_components/top-link";
 
 export const metadata: Metadata = {
   title: "保存した計算の一覧・比較｜介護サービス 単位数シミュレーター",
@@ -23,12 +24,7 @@ export default function TanniPlansPage() {
             >
               ← シミュレーターに戻る
             </Link>
-            <Link
-              href="/"
-              className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-            >
-              経過記録のトップへ
-            </Link>
+            <TopLink className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400" />
           </div>
           <h1 className="mt-3 text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             保存した計算

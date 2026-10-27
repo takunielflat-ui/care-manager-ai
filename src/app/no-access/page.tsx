@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 
-import LogoutButton from "../_components/logout-button";
+import AppHeader from "../_components/app-header";
 
 /**
  * 無料モニター期間中に、許可されていないアカウントでログインした人に見せる案内ページ。
@@ -13,17 +13,12 @@ export default async function NoAccessPage() {
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
-      <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="mx-auto w-full max-w-xl">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{userEmail}</p>
-            <LogoutButton />
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            現在は無料モニターの方だけがご利用いただけます
-          </h1>
-        </div>
-      </header>
+      <AppHeader
+        menu="limited"
+        title="現在は無料モニターの方だけがご利用いただけます"
+        description={<span className="break-all">ログイン中：{userEmail}</span>}
+        userEmail={userEmail}
+      />
 
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-4 px-4 py-6 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
         <p>
