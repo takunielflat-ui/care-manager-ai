@@ -2,32 +2,93 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
+import { useRouter } from "next/navigation";
 
 import { buildAssessmentText, choicesFor } from "@/lib/assessment/build";
+import { DISPLAY_NAME_MAX } from "@/lib/assessment/payload";
 import { dropUnavailable, toggleChoice } from "@/lib/assessment/selection";
-import { ITEMS, SECTIONS, type Item, type SectionId, type Selections } from "@/lib/assessment/templates";
+import {
+  ITEMS,
+  SECTIONS,
+  TEMPLATE_VERSION,
+  type Item,
+  type SectionId,
+  type Selections,
+} from "@/lib/assessment/templates";
 
 /** よく使う続柄。押すまでは何も登録しない */
 const FAMILY_CANDIDATES = ["長女", "長男", "次女", "次男", "妻", "夫", "嫁"];
 
-const LEAVE_MESSAGE = "入力した内容は消えます。よろしいですか？";
+const LEAVE_MESSAGE = "保存していない内容は消えます。よろしいですか？";
 
 const itemDomId = (id: string) => `assessment-item-${id}`;
 
-export default function AssessmentForm() {
-  const [family, setFamily] = useState<string[]>([]);
+/** 保存済みのアセスメント（編集画面で渡す） */
+export type SavedAssessment = {
+  id: string;
+  displayName: string;
+  assessedOn: string;
+  family: string[];
+  selections: Selections;
+  includeUnconfirmed: boolean;
+  generatedText: string;
+  templateVersion: number;
+};
+
+type Snapshot = {
+  displayName: string;
+  assessedOn: string;
+  family: string[];
+  selections: Selections;
+  includeUnconfirmed: boolean;
+};
+
+/** 「保存していない変更があるか」を比べるための文字列 */
+const snapshotKey = (s: Snapshot) => JSON.stringify(s);
+
+export default function AssessmentForm({
+  saved,
+  defaultDate,
+}: {
+  saved?: SavedAssessment;
+  /** 新規作成のときの実施日の初期値（日本時間の今日） */
+  defaultDate: string;
+}) {
+  const router = useRouter();
+  const [assessmentId, setAssessmentId] = useState(saved?.id ?? null);
+  const [displayName, setDisplayName] = useState(saved?.displayName ?? "");
+  const [assessedOn, setAssessedOn] = useState(saved?.assessedOn ?? defaultDate);
+  const [family, setFamily] = useState<string[]>(saved?.family ?? []);
   const [familyInput, setFamilyInput] = useState("");
-  const [selections, setSelections] = useState<Selections>({});
-  const [includeUnconfirmed, setIncludeUnconfirmed] = useState(true);
+  // 保存後にテンプレートから消えた項目・選択肢は外しておく（そのままだと保存で受け付けられないため）
+  const [selections, setSelections] = useState<Selections>(() =>
+    saved ? dropUnavailable(saved.selections, ITEMS, saved.family) : {},
+  );
+  const [includeUnconfirmed, setIncludeUnconfirmed] = useState(saved?.includeUnconfirmed ?? true);
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set(["kihon"]));
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState("");
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [nameError, setNameError] = useState("");
+  const [showSavedToast, setShowSavedToast] = useState(false);
 
-  const result = useMemo(
+  const current: Snapshot = { displayName, assessedOn, family, selections, includeUnconfirmed };
+  const currentKey = snapshotKey(current);
+  // 最後に保存した（または開いた）ときの状態。新規作成なら最初の空の状態
+  const [savedKey, setSavedKey] = useState(() => currentKey);
+  const isDirty = currentKey !== savedKey;
+
+  const built = useMemo(
     () => buildAssessmentText({ selections, family, includeUnconfirmed }),
     [selections, family, includeUnconfirmed],
   );
+  // 以前の版のテンプレートで保存したものは、何も変えていない間は保存した文章をそのまま見せる。
+  // 選び直したら、今の版で作り直す。
+  const showOldText = saved !== undefined && saved.templateVersion !== TEMPLATE_VERSION && !isDirty;
+  const result = showOldText ? { ...built, text: saved.generatedText } : built;
 
   const unconfirmedBySection = useMemo(() => {
     const counts = new Map<SectionId, number>();
@@ -38,9 +99,7 @@ export default function AssessmentForm() {
     return counts;
   }, [result.unconfirmedIds]);
 
-  const isDirty = family.length > 0 || Object.keys(selections).length > 0;
-
-  // 保存できないので、入力がある状態で画面を離れようとしたら確認する。
+  // 保存していない変更がある状態で画面を離れようとしたら確認する。
   // ・再読み込み／タブを閉じる／外のサイトへ移る → beforeunload
   // ・アプリ内のリンク（← トップ、メニュー）とログアウト → クリックを先に受け取って確認する
   useEffect(() => {
@@ -77,6 +136,12 @@ export default function AssessmentForm() {
     const timer = setTimeout(() => setCopied(false), 2000);
     return () => clearTimeout(timer);
   }, [copied]);
+
+  useEffect(() => {
+    if (!showSavedToast) return;
+    const timer = setTimeout(() => setShowSavedToast(false), 1500);
+    return () => clearTimeout(timer);
+  }, [showSavedToast]);
 
   // 移動先の項目は少しのあいだ色を付けて目立たせる
   useEffect(() => {
@@ -128,10 +193,119 @@ export default function AssessmentForm() {
     }
   }
 
+  async function handleSave() {
+    setSaveError("");
+    if (displayName.trim() === "") {
+      setNameError("利用者の表示名（イニシャル）を入力してください。");
+      document.getElementById("assessment-display-name")?.focus();
+      return;
+    }
+    setNameError("");
+    setIsSaving(true);
+    try {
+      const response = await fetch(assessmentId ? `/api/assessments/${assessmentId}` : "/api/assessments", {
+        method: assessmentId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(current),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setSaveError(data?.error ?? "保存に失敗しました。時間をおいてもう一度お試しください。");
+        return;
+      }
+      setSavedKey(currentKey);
+      setShowSavedToast(true);
+      if (!assessmentId && typeof data?.id === "string") {
+        // 新規作成のあとは編集画面のURLにする（そこから続けて上書き保存できる）
+        setAssessmentId(data.id);
+        window.history.replaceState(null, "", `/assessment/${data.id}`);
+      }
+    } catch {
+      setSaveError("保存に失敗しました。通信状態を確認して、もう一度お試しください。");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!assessmentId) return;
+    if (!window.confirm("このアセスメントを削除しますか？")) return;
+    setSaveError("");
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/assessments/${assessmentId}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        setSaveError(data?.error ?? "削除に失敗しました。時間をおいてもう一度お試しください。");
+        return;
+      }
+      // 削除したので「保存していない内容」の確認は出さずに一覧へ戻る
+      setSavedKey(currentKey);
+      router.push("/assessment");
+      router.refresh();
+    } catch {
+      setSaveError("削除に失敗しました。通信状態を確認して、もう一度お試しください。");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   const unconfirmedSet = new Set(result.unconfirmedIds);
 
   return (
     <div className="flex flex-col gap-6">
+      {showSavedToast && (
+        <div
+          role="status"
+          className="fixed inset-x-0 top-20 z-50 mx-auto w-fit rounded-full bg-zinc-900 px-5 py-2.5 text-base font-bold text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          保存しました
+        </div>
+      )}
+
+      {/* ===== 利用者・実施日 ===== */}
+      <section className="flex flex-col gap-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="assessment-display-name" className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+            利用者の表示名
+          </label>
+          <input
+            id="assessment-display-name"
+            value={displayName}
+            onChange={(event) => {
+              setDisplayName(event.target.value);
+              if (event.target.value.trim() !== "") setNameError("");
+            }}
+            maxLength={DISPLAY_NAME_MAX}
+            placeholder="A様"
+            aria-invalid={nameError !== ""}
+            aria-describedby="assessment-display-name-help"
+            className="min-h-12 rounded-lg border border-zinc-300 bg-white px-3 text-base text-zinc-900 placeholder:text-zinc-400 aria-invalid:border-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+          <p id="assessment-display-name-help" className="text-sm text-zinc-600 dark:text-zinc-400">
+            実名ではなく、イニシャル等で入力してください（例：A様）。
+          </p>
+          {nameError !== "" && (
+            <p role="alert" className="text-base font-bold text-red-700 dark:text-red-400">
+              {nameError}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="assessment-date" className="text-base font-bold text-zinc-900 dark:text-zinc-50">
+            実施日
+          </label>
+          <input
+            id="assessment-date"
+            type="date"
+            value={assessedOn}
+            onChange={(event) => setAssessedOn(event.target.value)}
+            required
+            className="min-h-12 rounded-lg border border-zinc-300 bg-white px-3 text-base text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+          />
+        </div>
+      </section>
+
       {/* ===== ご家族の続柄 ===== */}
       <section className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
         <div>
@@ -275,6 +449,11 @@ export default function AssessmentForm() {
           />
           未確認の項目も文に入れる
         </label>
+        {showOldText && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-[15px] leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            この文章は、以前の文章ルール（版{saved.templateVersion}）で保存したものです。選び直すと、今のルールで作り直します。
+          </p>
+        )}
         <div aria-live="polite" className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
           {result.text === "" ? (
             <p className="text-base text-zinc-500 dark:text-zinc-400">まだ何も選ばれていません。</p>
@@ -292,27 +471,74 @@ export default function AssessmentForm() {
         )}
       </section>
 
-      {/* 項目が多いので、未確認への移動とコピーは常に親指の届く画面下端に留めておく */}
-      <div className="sticky bottom-0 -mx-4 -mb-6 flex items-center gap-2 border-t border-zinc-200 bg-zinc-50/80 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-black/80">
+      {assessmentId && (
+        <section className="flex flex-col gap-2 border-t border-zinc-200 pt-6 dark:border-zinc-800">
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting || isSaving}
+            className="min-h-12 self-start rounded-lg border border-red-300 bg-white px-4 text-base font-bold text-red-700 disabled:opacity-40 dark:border-red-900 dark:bg-zinc-950 dark:text-red-400"
+          >
+            {isDeleting ? "削除中..." : "🗑️ このアセスメントを削除"}
+          </button>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">削除すると一覧に出なくなります。</p>
+        </section>
+      )}
+
+      {saveError !== "" && (
+        <p
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-base text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+        >
+          {saveError}
+        </p>
+      )}
+
+      {/* 項目が多いので、未確認への移動・コピー・保存は常に親指の届く画面下端に留めておく。
+          スマホ幅で3つ並ぶため、文字は小さくせず2行に折り返す */}
+      <div className="sticky bottom-0 -mx-4 -mb-6 grid grid-cols-3 gap-2 border-t border-zinc-200 bg-zinc-50/80 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-black/80">
         <button
           type="button"
           onClick={jumpToFirstUnconfirmed}
           disabled={result.unconfirmedCount === 0}
-          className="flex min-h-14 flex-1 items-center justify-center rounded-xl border-2 border-amber-500 bg-amber-50 px-3 text-base font-bold text-amber-900 disabled:border-teal-600 disabled:bg-teal-50 disabled:text-teal-800 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-200 dark:disabled:border-teal-500 dark:disabled:bg-teal-950 dark:disabled:text-teal-300"
+          className="flex min-h-14 flex-col items-center justify-center rounded-xl border-2 border-amber-500 bg-amber-50 px-1 text-[15px] leading-tight font-bold text-amber-900 disabled:border-teal-600 disabled:bg-teal-50 disabled:text-teal-800 dark:border-amber-600 dark:bg-amber-950 dark:text-amber-200 dark:disabled:border-teal-500 dark:disabled:bg-teal-950 dark:disabled:text-teal-300"
         >
-          {result.unconfirmedCount > 0 ? `未確認 ${result.unconfirmedCount}件 ▸` : "✓ 未確認なし"}
+          {result.unconfirmedCount > 0 ? (
+            <>
+              <span>未確認</span>
+              <span>{result.unconfirmedCount}件 ▸</span>
+            </>
+          ) : (
+            "✓ 未確認なし"
+          )}
         </button>
         <button
           type="button"
           onClick={handleCopy}
           disabled={result.text === ""}
-          className={`flex min-h-14 flex-1 items-center justify-center rounded-xl border px-3 text-base font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`flex min-h-14 flex-col items-center justify-center rounded-xl border px-1 text-[15px] leading-tight font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
             copied
               ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
               : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
           }`}
         >
-          {copied ? "☑ コピーしました" : "📋 コピー"}
+          {copied ? (
+            <>
+              <span>☑ コピー</span>
+              <span>しました</span>
+            </>
+          ) : (
+            "📋 コピー"
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving || isDeleting || (assessmentId !== null && !isDirty)}
+          aria-busy={isSaving}
+          className="flex min-h-14 flex-col items-center justify-center rounded-xl bg-teal-700 px-1 text-[15px] leading-tight font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:bg-teal-900 disabled:bg-zinc-300 disabled:text-zinc-600 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-400"
+        >
+          {isSaving ? "保存中..." : assessmentId !== null && !isDirty ? "✓ 保存済み" : "💾 保存"}
         </button>
       </div>
     </div>
