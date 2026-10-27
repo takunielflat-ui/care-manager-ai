@@ -64,7 +64,9 @@ export default function AssessmentForm({
   const [selections, setSelections] = useState<Selections>(() =>
     saved ? dropUnavailable(saved.selections, ITEMS, saved.family) : {},
   );
-  const [includeUnconfirmed, setIncludeUnconfirmed] = useState(saved?.includeUnconfirmed ?? true);
+  // 介護ソフトに貼る文章に【〇〇：未確認】が混ざらないよう、新規作成では最初は入れない。
+  // 何が未確認かはセクションの見出しと「未確認 ◯件」で分かる。保存済みのものは保存時の設定に従う
+  const [includeUnconfirmed, setIncludeUnconfirmed] = useState(saved?.includeUnconfirmed ?? false);
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set(["kihon"]));
   /** コピーしたもの："all"（全部）またはセクション名。少し置いて null に戻す */
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
