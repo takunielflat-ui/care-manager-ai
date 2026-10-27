@@ -24,6 +24,8 @@ export default function LogoutButton({ className = "text-sm" }: { className?: st
     <button
       type="button"
       onClick={handleLogout}
+      // 入力中の画面（アセスメント）が「画面を離れます」の確認を出すための目印
+      data-leaves-page
       disabled={isLoggingOut}
       className={`shrink-0 ${className} font-medium text-zinc-500 underline-offset-2 hover:text-zinc-800 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-100`}
     >

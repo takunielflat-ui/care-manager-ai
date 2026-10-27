@@ -21,6 +21,7 @@ test("何も選ばない：全項目が未確認になり、件数が必須項�
   assert.equal(REQUIRED.length, 72);
   assert.equal(r.unconfirmedCount, REQUIRED.length);
   assert.deepEqual([...r.unconfirmedItems].sort(), REQUIRED.map((i) => i.label).sort());
+  assert.deepEqual([...r.unconfirmedIds].sort(), REQUIRED.map((i) => i.id).sort());
   for (const i of REQUIRED) assert.ok(r.text.includes(`【${i.label}：未確認】`), i.label);
   // 任意項目は出さない
   assert.ok(!r.text.includes("転倒した場所"));
