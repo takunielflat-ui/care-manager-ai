@@ -1,30 +1,13 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 
+import { todayInJapan } from "@/lib/date";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "./_components/app-header";
 import VisitRecordForm from "./_components/visit-record-form";
 
 // 訪問日の初期値にリクエスト時点の日付を使うため、ビルド時のプリレンダリングを避ける。
 export const dynamic = "force-dynamic";
-
-/**
- * `<input type="date">` 用の YYYY-MM-DD を日本時間で組み立てる。
- * サーバーの TZ に依存させないことで、ハイドレーション時のズレも防ぐ。
- */
-function todayInJapan() {
-  const parts = new Intl.DateTimeFormat("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-
-  const get = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
 
 export default async function Home() {
   // 認証確認は proxy.ts が既に行っているので、ここでは結果(メールアドレス)を

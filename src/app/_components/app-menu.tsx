@@ -11,7 +11,7 @@ type MenuLink = { href: string; label: string };
 /** ログインして利用を許可されている人のメニュー */
 const FULL_LINKS: MenuLink[] = [
   { href: "/", label: "訪問記録の入力（トップ）" },
-  { href: "/assessment/new", label: "アセスメント" },
+  { href: "/assessment", label: "アセスメント" },
   { href: "/records", label: "記録一覧" },
   { href: "/tools/tanni", label: "単位数電卓" },
   { href: "/settings", label: "辞書設定" },

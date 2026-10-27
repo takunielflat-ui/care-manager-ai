@@ -224,3 +224,52 @@ select lower(email), '既存ユーザー'
 from auth.users
 where email is not null
 on conflict (email) do nothing;
+
+-- care-manager-ai: assessments テーブルとRLSポリシー
+-- 選択式アセスメント（/assessment）の保存。AIは使わない。
+-- 文章（generated_text）は保存時点のものを残す。テンプレートの文言をあとで直しても
+-- 保存済みの文章は変わらない。selections / family は開き直して編集するために残す。
+-- アセスメントも運営指導の対象になりうる記録のため、削除は deleted_at を立てる論理削除のみ。
+-- 物理削除のポリシーは作らない（アプリからは本当に消せない）。
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+create table public.assessments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  display_name text not null check (char_length(display_name) between 1 and 20),
+  assessed_on date not null,
+  family jsonb not null default '[]'::jsonb,
+  selections jsonb not null default '{}'::jsonb,
+  include_unconfirmed boolean not null default true,
+  generated_text text not null,
+  template_version integer not null,
+  unconfirmed_count integer not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+-- 一覧は常に deleted_at is null で、実施日の新しい順に出す
+create index assessments_user_assessed_active_idx
+  on public.assessments (user_id, assessed_on desc, created_at desc)
+  where deleted_at is null;
+
+create trigger set_assessments_updated_at
+  before update on public.assessments
+  for each row
+  execute function public.set_updated_at();
+
+alter table public.assessments enable row level security;
+
+create policy "select own assessments"
+  on public.assessments for select
+  using (auth.uid() = user_id);
+
+create policy "insert own assessments"
+  on public.assessments for insert
+  with check (auth.uid() = user_id);
+
+create policy "update own assessments"
+  on public.assessments for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
