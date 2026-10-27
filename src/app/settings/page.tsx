@@ -1,7 +1,5 @@
-import Link from "next/link";
-
 import { createClient } from "@/lib/supabase/server";
-import LogoutButton from "../_components/logout-button";
+import AppHeader from "../_components/app-header";
 import KnownNamesManager from "./_components/known-names-manager";
 import CannedPhrasesManager from "./_components/canned-phrases-manager";
 
@@ -31,40 +29,10 @@ export default async function SettingsPage() {
 
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
-      <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="mx-auto w-full max-w-xl">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <Link
-              href="/"
-              className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-            >
-              ← 新しい記録を作成
-            </Link>
-            <div className="flex shrink-0 items-center gap-4">
-              <Link
-                href="/help"
-                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-              >
-                使い方
-              </Link>
-              <Link
-                href="/tools/tanni"
-                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-              >
-                単位数電卓
-              </Link>
-              <LogoutButton />
-            </div>
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            匿名化辞書の設定
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            「〜病院」「〜デイサービス」のような語尾が付かない固有名詞は自動で拾えません。
-            AIに送る前に隠したい人名・病院名・施設名・地名をここに登録してください。
-          </p>
-        </div>
-      </header>
+      <AppHeader
+        title="匿名化辞書の設定"
+        description="「〜病院」「〜デイサービス」のような語尾が付かない固有名詞は自動で拾えません。AIに送る前に隠したい人名・病院名・施設名・地名をここに登録してください。"
+      />
 
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-10 px-4 py-6">
         <KnownNamesManager initialKnownNames={data ?? []} />

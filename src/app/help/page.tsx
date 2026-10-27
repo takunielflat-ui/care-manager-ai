@@ -1,7 +1,6 @@
 import Link from "next/link";
 
-import { createClient } from "@/lib/supabase/server";
-import LogoutButton from "../_components/logout-button";
+import AppHeader from "../_components/app-header";
 
 export const dynamic = "force-dynamic";
 
@@ -27,41 +26,10 @@ function StepCard({
   );
 }
 
-export default async function HelpPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+export default function HelpPage() {
   return (
     <div className="flex flex-1 flex-col bg-zinc-50 dark:bg-black">
-      <header className="border-b border-zinc-200 bg-white px-4 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="mx-auto w-full max-w-xl">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <Link
-              href="/"
-              className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-            >
-              ← 新しい記録を作成
-            </Link>
-            <div className="flex shrink-0 items-center gap-4">
-              <Link
-                href="/tools/tanni"
-                className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
-              >
-                単位数電卓
-              </Link>
-              {user && <LogoutButton />}
-            </div>
-          </div>
-          <h1 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            使い方
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            初めての方向けの簡単なご案内です。
-          </p>
-        </div>
-      </header>
+      <AppHeader title="使い方" description="初めての方向けの簡単なご案内です。" />
 
       <main className="mx-auto flex w-full max-w-xl flex-1 flex-col gap-8 px-4 py-6">
         <section className="flex flex-col gap-2">
@@ -80,11 +48,10 @@ export default async function HelpPage() {
           </h2>
           <ol className="flex flex-col gap-3">
             <StepCard step={1} title="訪問メモを入力する">
-              トップ画面（
               <Link href="/" className="text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
-                新しい記録を作成
+                トップ画面
               </Link>
-              ）で、訪問日・利用者名・訪問メモを入力します。利用者・家族の名前や病院名は、実名ではなくイニシャル等で入力してください（例：A様、長女）。
+              で、訪問日・利用者名・訪問メモを入力します。利用者・家族の名前や病院名は、実名ではなくイニシャル等で入力してください（例：A様、長女）。
               入力中の内容は自動で一時保存されるので、途中で画面を閉じても「前回の下書きを復元」から続きを入力できます。
             </StepCard>
             <StepCard step={2} title="「⚡ 簡潔」または「📄 詳細」をタップする">

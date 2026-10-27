@@ -18,6 +18,7 @@ import SummarySheet from "./summary-sheet";
 import FamilyDialog from "./family-dialog";
 import PrintDialog from "./print-dialog";
 import JigyoshoDialog from "./jigyosho-dialog";
+import TopLink from "./top-link";
 import SavePlanDialog, { type TanniPlanState } from "./save-plan-dialog";
 import { プランを計算 } from "./plan-calc";
 import {
@@ -218,13 +219,7 @@ export default function TanniSimulator() {
 
       <div className="tanni-app-chrome">
         <header className="sticky top-0 z-20 flex items-center gap-2.5 bg-teal-800 px-4 pt-[calc(10px+env(safe-area-inset-top))] pb-2.5 text-white">
-          <Link
-            href="/"
-            aria-label="経過記録の入力画面へ戻る"
-            className="shrink-0 flex items-center gap-1 rounded-full bg-white/15 px-3 py-2 text-[13px] font-bold"
-          >
-            ← 経過記録
-          </Link>
+          <TopLink className="shrink-0 flex items-center gap-1 rounded-full bg-white/15 px-3 py-2 text-[13px] font-bold" />
           <div className="flex-1">
             <h1 className="text-[17px] font-bold tracking-tight">単位数シミュレーター</h1>
             <span className="block text-[11px] opacity-85">訪問先で、その場で費用を出す</span>
