@@ -28,6 +28,8 @@ export type AssessmentResult = {
   text: string;
   unconfirmedCount: number;
   unconfirmedItems: string[];
+  /** 未確認の項目ID（画面でセクションごとの件数や、最初の未確認へ移動するのに使う） */
+  unconfirmedIds: string[];
 };
 
 const FAMILY = "家族";
@@ -91,6 +93,7 @@ type Piece = { text: string } | { missing: string };
 export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
   const { selections: sel, family, includeUnconfirmed } = input;
   const unconfirmedItems: string[] = [];
+  const unconfirmedIds: string[] = [];
   const blocks: string[] = [];
   const byId = new Map(ITEMS.map((i) => [i.id, i]));
   const picks = new Map(ITEMS.map((i) => [i.id, i.skipIf?.(sel) ? null : pick(i, sel[i.id], family)]));
@@ -100,6 +103,7 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
     const done = new Set<string>();
     const missing = (item: Item) => {
       unconfirmedItems.push(item.label);
+      unconfirmedIds.push(item.id);
       pieces.push({ missing: item.label });
     };
 
@@ -157,7 +161,12 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
     if (body) blocks.push(`【${section.title}】\n${body}`);
   }
 
-  return { text: blocks.join("\n\n"), unconfirmedCount: unconfirmedItems.length, unconfirmedItems };
+  return {
+    text: blocks.join("\n\n"),
+    unconfirmedCount: unconfirmedItems.length,
+    unconfirmedItems,
+    unconfirmedIds,
+  };
 }
 
 /**

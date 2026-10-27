@@ -15,9 +15,12 @@ export default function AppHeader({
   userEmail,
   isTop = false,
   menu = "full",
+  children,
 }: {
   title: string;
   description?: React.ReactNode;
+  /** 見出しの下に置くボタンなど */
+  children?: React.ReactNode;
   /** メニューを開いたときに出すログイン中のメールアドレス */
   userEmail?: string | null;
   /** トップ画面自身では「← トップ」の代わりにアプリ名を出す */
@@ -48,6 +51,7 @@ export default function AppHeader({
           {description && (
             <div className="mt-1 text-[15px] leading-relaxed text-zinc-600 dark:text-zinc-400">{description}</div>
           )}
+          {children}
         </div>
       </header>
     </>

@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "./_components/app-header";
@@ -50,7 +51,14 @@ export default async function Home() {
         title="訪問記録の入力"
         description="入力内容をもとに第5表（居宅介護支援経過）を作成します。"
         userEmail={userEmail}
-      />
+      >
+        <Link
+          href="/assessment/new"
+          className="mt-3 inline-flex min-h-11 items-center rounded-lg border border-teal-700 bg-white px-4 text-base font-bold text-teal-700 dark:border-teal-500 dark:bg-zinc-950 dark:text-teal-400"
+        >
+          アセスメントを作る →
+        </Link>
+      </AppHeader>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 py-6">
         <VisitRecordForm
