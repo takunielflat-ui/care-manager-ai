@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/kaigo/master.test.ts src/lib/anonymize.test.ts src/lib/assessment/build.test.ts src/lib/assessment/selection.test.ts",
+    "test": "node --test src/lib/kaigo/master.test.ts src/lib/anonymize.test.ts src/lib/assessment/build.test.ts src/lib/assessment/selection.test.ts src/lib/assessment/payload.test.ts",
     "screenshots": "node scripts/screenshots/capture.mjs",
     "screenshots:login": "node scripts/screenshots/capture.mjs --login"
   },
