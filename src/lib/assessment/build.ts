@@ -170,6 +170,18 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
 }
 
 /**
+ * できあがった文章をセクションごとに分ける（介護ソフトの欄ごとに貼り付けるため）。
+ * 「【基本動作】\n本文」が空行1つで並んだ形を前提にする。保存済みの古い版の文章にも使う。
+ */
+export function splitSections(text: string): { title: string; body: string }[] {
+  if (text.trim() === "") return [];
+  return text.split("\n\n").map((block) => {
+    const match = block.match(/^【(.+?)】\n?([\s\S]*)$/);
+    return match ? { title: match[1], body: match[2] } : { title: "", body: block };
+  });
+}
+
+/**
  * 移動：屋内・屋外それぞれ「使うもの」と「介助の程度」から1文。
  * 屋内と屋外が両方とも同じなら「屋内外とも、移動は〜」の1文にまとめる。
  */
