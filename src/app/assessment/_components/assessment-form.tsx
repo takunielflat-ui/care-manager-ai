@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 
-import { buildAssessmentText, choicesFor } from "@/lib/assessment/build";
+import { buildAssessmentText, choicesFor, splitSections } from "@/lib/assessment/build";
 import { DISPLAY_NAME_MAX } from "@/lib/assessment/payload";
 import { dropUnavailable, toggleChoice } from "@/lib/assessment/selection";
 import {
@@ -66,7 +66,8 @@ export default function AssessmentForm({
   );
   const [includeUnconfirmed, setIncludeUnconfirmed] = useState(saved?.includeUnconfirmed ?? true);
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set(["kihon"]));
-  const [copied, setCopied] = useState(false);
+  /** コピーしたもの："all"（全部）またはセクション名。少し置いて null に戻す */
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [copyError, setCopyError] = useState("");
   const [flashId, setFlashId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -132,10 +133,10 @@ export default function AssessmentForm({
 
   // コピー完了の表示は少し置いてから元に戻す
   useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
+    if (!copiedKey) return;
+    const timer = setTimeout(() => setCopiedKey(null), 2000);
     return () => clearTimeout(timer);
-  }, [copied]);
+  }, [copiedKey]);
 
   useEffect(() => {
     if (!showSavedToast) return;
@@ -183,11 +184,11 @@ export default function AssessmentForm({
     document.getElementById(itemDomId(first.id))?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  async function handleCopy() {
+  async function handleCopy(text: string, key: string) {
     setCopyError("");
     try {
-      await navigator.clipboard.writeText(result.text);
-      setCopied(true);
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
     } catch {
       setCopyError("コピーできませんでした。文章を長押しして選択し、コピーしてください。");
     }
@@ -454,13 +455,41 @@ export default function AssessmentForm({
             この文章は、以前の文章ルール（版{saved.templateVersion}）で保存したものです。選び直すと、今のルールで作り直します。
           </p>
         )}
-        <div aria-live="polite" className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          {result.text === "" ? (
-            <p className="text-base text-zinc-500 dark:text-zinc-400">まだ何も選ばれていません。</p>
-          ) : (
-            <p className="text-base leading-relaxed whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">{result.text}</p>
-          )}
-        </div>
+        {/* 介護ソフトの欄ごとに貼り付けられるよう、セクションごとにコピーできる（見出しは含めない） */}
+        {result.text === "" ? (
+          <p className="rounded-lg border border-zinc-200 bg-white p-4 text-base text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+            まだ何も選ばれていません。
+          </p>
+        ) : (
+          <ul aria-live="polite" className="flex flex-col gap-3">
+            {splitSections(result.text).map(({ title, body }) => {
+              const done = copiedKey === title;
+              return (
+                <li
+                  key={title}
+                  className="flex flex-col gap-2 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-50">{title}</h3>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(body, title)}
+                      aria-label={`${title}の文章をコピー`}
+                      className={`min-h-11 shrink-0 rounded-lg border px-3 text-base font-bold transition-colors ${
+                        done
+                          ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
+                          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      }`}
+                    >
+                      {done ? "☑ コピーしました" : "📋 コピー"}
+                    </button>
+                  </div>
+                  <p className="text-base leading-relaxed whitespace-pre-wrap text-zinc-900 dark:text-zinc-100">{body}</p>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         {copyError !== "" && (
           <p
             role="alert"
@@ -514,21 +543,24 @@ export default function AssessmentForm({
         </button>
         <button
           type="button"
-          onClick={handleCopy}
+          onClick={() => handleCopy(result.text, "all")}
           disabled={result.text === ""}
           className={`flex min-h-14 flex-col items-center justify-center rounded-xl border px-1 text-[15px] leading-tight font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-            copied
+            copiedKey === "all"
               ? "border-teal-600 bg-teal-50 text-teal-800 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-300"
               : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
           }`}
         >
-          {copied ? (
+          {copiedKey === "all" ? (
             <>
               <span>☑ コピー</span>
               <span>しました</span>
             </>
           ) : (
-            "📋 コピー"
+            <>
+              <span>📋 全部</span>
+              <span>コピー</span>
+            </>
           )}
         </button>
         <button

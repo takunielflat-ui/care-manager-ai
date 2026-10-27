@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildAssessmentText, choicesFor } from "./build.ts";
+import { buildAssessmentText, choicesFor, splitSections } from "./build.ts";
 import { ITEMS, type Selections } from "./templates.ts";
 
 const run = (selections: Selections, family: string[] = [], includeUnconfirmed = true) =>
@@ -170,4 +170,15 @@ test("判断語チェック：どの選択肢を選んでも判断の言葉が�
     assert.ok(!text.includes("undefined"), text);
     for (const w of BANNED) assert.ok(!text.includes(w), `「${w}」が含まれている: ${text}`);
   }
+});
+
+test("セクションごとに分ける：見出しを除いた本文を、介護ソフトの欄ごとに貼れる形で返す", () => {
+  const { text } = run({ kihon_negaeri: "自立", ido_in_tool: "杖（T字）", ido_in_level: "自立" }, [], false);
+  assert.deepEqual(splitSections(text), [
+    { title: "基本動作", body: "寝返りは自立している。" },
+    { title: "移動", body: "屋内の移動は杖（T字）使用で自立している。" },
+  ]);
+  // 未確認も出す設定なら、全10セクションに分かれる
+  assert.equal(splitSections(run({}).text).length, 10);
+  assert.deepEqual(splitSections(""), []);
 });
