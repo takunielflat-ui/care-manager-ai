@@ -273,3 +273,14 @@ create policy "update own assessments"
   on public.assessments for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
+
+-- care-manager-ai: allowed_emails に「使える機能の範囲」（plan）を追加
+-- アセスメントを買い切りで購入した人は、アセスメントだけを使える（第5表の作成＝AIの課金は使えない）。
+--   plan … 'full'（すべての機能。モニター・既存ユーザー）／'assessment'（アセスメントだけ。購入者）
+-- 既存の行はすべて 'full' になる（今までどおり使える）。購入者を追加するときは plan を 'assessment' にする。
+-- アプリはこの列がなくても従来どおり動くため、デプロイの前後どちらで実行してもよい。
+-- 既に allowed_emails を作成済みの場合は、この部分だけを追加実行すればよい。
+
+alter table public.allowed_emails
+  add column plan text not null default 'full'
+  check (plan in ('full', 'assessment'));

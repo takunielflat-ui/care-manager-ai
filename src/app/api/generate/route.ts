@@ -5,7 +5,7 @@ import {
   getFifthSheetSystemPrompt,
 } from "@/prompts/fifthSheetPrompt";
 import { createClient } from "@/lib/supabase/server";
-import { hasAppAccess, isUnlimitedEmail } from "@/lib/access";
+import { getAccessPlan, isUnlimitedEmail } from "@/lib/access";
 import {
   anonymizeForAI,
   clearRestoreMap,
@@ -108,10 +108,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "ログインが必要です。" }, { status: 401 });
   }
 
-  // 無料モニター期間中は、許可したメールアドレスだけが生成（＝課金）を使える
-  if (!(await hasAppAccess(supabase, user.email))) {
+  // 許可したメールアドレスのうち、すべての機能を使える人だけが生成（＝課金）を使える。
+  // アセスメントだけの購入者は使えない。
+  const plan = await getAccessPlan(supabase, user.email);
+  if (plan !== "full") {
     return Response.json(
-      { error: "現在は無料モニターの方だけがご利用いただけます。" },
+      {
+        error:
+          plan === "assessment"
+            ? "第5表の作成は、ご利用中のプランには含まれていません。"
+            : "現在は無料モニターの方だけがご利用いただけます。",
+      },
       { status: 403 },
     );
   }
