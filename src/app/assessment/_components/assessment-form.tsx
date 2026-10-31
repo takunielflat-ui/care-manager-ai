@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -20,6 +20,9 @@ import {
 const FAMILY_CANDIDATES = ["長女", "長男", "次女", "次男", "妻", "夫", "嫁"];
 
 const LEAVE_MESSAGE = "保存していない内容は消えます。よろしいですか？";
+
+/** ブラウザの「戻る」を受け止めるために足した履歴の目印 */
+const BACK_GUARD_KEY = "assessmentBackGuard";
 
 const itemDomId = (id: string) => `assessment-item-${id}`;
 
@@ -102,12 +105,21 @@ export default function AssessmentForm({
     return counts;
   }, [result.unconfirmedIds]);
 
+  const isDirtyRef = useRef(isDirty);
+  /** 今いる履歴が「戻る」用のガードかどうか */
+  const onBackGuardRef = useRef(false);
+  /** 「戻る」の確認で OK して画面を離れる途中か */
+  const leavingRef = useRef(false);
+
   // 保存していない変更がある状態で画面を離れようとしたら確認する。
   // ・再読み込み／タブを閉じる／外のサイトへ移る → beforeunload
   // ・アプリ内のリンク（← トップ、メニュー）とログアウト → クリックを先に受け取って確認する
+  // ・ブラウザの「戻る」・スワイプ → 下の popstate の処理で確認する
   useEffect(() => {
     if (!isDirty) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      // 「戻る」の確認で OK 済みなら、外のサイトへ戻るときに二重に聞かない
+      if (leavingRef.current) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -131,6 +143,39 @@ export default function AssessmentForm({
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClickCapture, true);
     };
+  }, [isDirty]);
+
+  // ブラウザの「戻る」ボタン・スワイプで戻る → 同じURLの履歴を1つ足しておき（ガード）、
+  // そこから戻られた（popstate）ときに確認する。キャンセルならガードを足し直してこの画面に留まる。
+  // ガードは保存後も残るため、変更がないときは何も聞かずにもう1つ戻り、戻る操作が1回で済むようにする。
+  useEffect(() => {
+    isDirtyRef.current = isDirty;
+  }, [isDirty]);
+
+  useEffect(() => {
+    // 別の画面から「戻る」でガードの履歴に戻ってきた場合も、ガードの上にいるものとして扱う
+    onBackGuardRef.current = window.history.state?.[BACK_GUARD_KEY] === true;
+    const onPopState = (event: PopStateEvent) => {
+      if (!onBackGuardRef.current) return;
+      onBackGuardRef.current = false;
+      // Next.js のルーターより先に受け取り、同じURLへの移動として処理させない
+      event.stopImmediatePropagation();
+      if (!isDirtyRef.current || window.confirm(LEAVE_MESSAGE)) {
+        leavingRef.current = isDirtyRef.current;
+        window.history.back();
+      } else {
+        window.history.pushState({ [BACK_GUARD_KEY]: true }, "");
+        onBackGuardRef.current = true;
+      }
+    };
+    window.addEventListener("popstate", onPopState, true);
+    return () => window.removeEventListener("popstate", onPopState, true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDirty || onBackGuardRef.current) return;
+    window.history.pushState({ [BACK_GUARD_KEY]: true }, "");
+    onBackGuardRef.current = true;
   }, [isDirty]);
 
   // コピー完了の表示は少し置いてから元に戻す
@@ -221,7 +266,12 @@ export default function AssessmentForm({
       if (!assessmentId && typeof data?.id === "string") {
         // 新規作成のあとは編集画面のURLにする（そこから続けて上書き保存できる）
         setAssessmentId(data.id);
-        window.history.replaceState(null, "", `/assessment/${data.id}`);
+        // ガードの履歴の上なら目印を残す（「戻る」で新規作成の空の画面を挟まないため）
+        window.history.replaceState(
+          onBackGuardRef.current ? { [BACK_GUARD_KEY]: true } : null,
+          "",
+          `/assessment/${data.id}`,
+        );
       }
     } catch {
       setSaveError("保存に失敗しました。通信状態を確認して、もう一度お試しください。");
