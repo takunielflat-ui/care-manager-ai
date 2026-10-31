@@ -6,7 +6,16 @@ import {
 } from "@/prompts/fifthSheetPrompt";
 import { createClient } from "@/lib/supabase/server";
 import { hasAppAccess, isUnlimitedEmail } from "@/lib/access";
-import { anonymizeForAI, EMPTY_KNOWN_NAMES, type Category, type KnownNames } from "@/lib/anonymize";
+import {
+  anonymizeForAI,
+  clearRestoreMap,
+  containsOriginalTerm,
+  createStreamRestorer,
+  EMPTY_KNOWN_NAMES,
+  hasUnrestoredPlaceholder,
+  type Category,
+  type KnownNames,
+} from "@/lib/anonymize";
 import type { GenerationMode } from "@/lib/generationMode";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -157,7 +166,18 @@ export async function POST(request: Request) {
     : EMPTY_KNOWN_NAMES;
 
   // AIには実名を渡さない。保存・表示用の displayName/note はここでは書き換えない。
+  // restoreMap（ラベル→実名）はこのリクエストの間だけ使い、ストリーム終了時に破棄する。
   const anonymized = anonymizeForAI({ displayName, note }, knownNames);
+  const { restoreMap } = anonymized;
+
+  const userMessage = buildFifthSheetUserMessage({
+    visitDate,
+    displayName: anonymized.displayName,
+    note: anonymized.note,
+  });
+
+  // 送信文に伏せたはずの語が残っていないかの確認。有無だけを出し、中身は出さない。
+  console.log(`[generate] 送信文に実名${containsOriginalTerm(userMessage, restoreMap) ? "あり" : "なし"}`);
 
   const encoder = new TextEncoder();
 
@@ -190,27 +210,34 @@ export async function POST(request: Request) {
                 cache_control: { type: "ephemeral" },
               },
             ],
-            messages: [
-              {
-                role: "user",
-                content: buildFifthSheetUserMessage({
-                  visitDate,
-                  displayName: anonymized.displayName,
-                  note: anonymized.note,
-                }),
-              },
-            ],
+            messages: [{ role: "user", content: userMessage }],
           },
           { signal: request.signal },
         );
+
+        // AIの出力はラベル入り（「B氏」「Y事業所」）なので、実名へ戻してから画面へ流す。
+        // ラベルが差分の切れ目で分断されないよう、restorer が一部を溜めてから返す。
+        const restorer = createStreamRestorer(restoreMap);
+        let restoredText = "";
+        const sendRestored = (text: string) => {
+          if (text === "") return;
+          restoredText += text;
+          send({ type: "delta", text });
+        };
 
         for await (const event of messageStream) {
           if (
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
           ) {
-            send({ type: "delta", text: event.delta.text });
+            sendRestored(restorer.push(event.delta.text));
           }
+        }
+        sendRestored(restorer.flush());
+
+        // どの語が残ったかは実名が漏れるため出さない
+        if (hasUnrestoredPlaceholder(restoredText, `${displayName}\n${note}`)) {
+          console.warn("[generate] 復元漏れあり");
         }
 
         const final = await messageStream.finalMessage();
@@ -242,6 +269,8 @@ export async function POST(request: Request) {
           send({ type: "error", message: toUserMessage(error) });
         }
       } finally {
+        // 完了・失敗・中断のいずれでも対応表を破棄する
+        clearRestoreMap(restoreMap);
         if (!closed) {
           closed = true;
           controller.close();
