@@ -21,7 +21,7 @@ const FAMILY_CANDIDATES = ["長女", "長男", "次女", "次男", "妻", "夫",
 
 const LEAVE_MESSAGE = "保存していない内容は消えます。よろしいですか？";
 
-/** ブラウザの「戻る」を受け止めるために足した履歴の目印 */
+/** ブラウザの「戻る」を受け止めるための履歴の目印（"base": 元の履歴、"guard": 足した履歴） */
 const BACK_GUARD_KEY = "assessmentBackGuard";
 
 const itemDomId = (id: string) => `assessment-item-${id}`;
@@ -146,7 +146,9 @@ export default function AssessmentForm({
   }, [isDirty]);
 
   // ブラウザの「戻る」ボタン・スワイプで戻る → 同じURLの履歴を1つ足しておき（ガード）、
-  // そこから戻られた（popstate）ときに確認する。キャンセルならガードを足し直してこの画面に留まる。
+  // そこから元の履歴（ベース）へ戻られた（popstate）ときに確認する。
+  // キャンセルなら「進む」でガードへ戻ってこの画面に留まる。ここで履歴を足し直すと、
+  // Chrome は操作なしに足された履歴として次の「戻る」で飛ばしてしまうため、足し直さない。
   // ガードは保存後も残るため、変更がないときは何も聞かずにもう1つ戻り、戻る操作が1回で済むようにする。
   useEffect(() => {
     isDirtyRef.current = isDirty;
@@ -154,18 +156,28 @@ export default function AssessmentForm({
 
   useEffect(() => {
     // 別の画面から「戻る」でガードの履歴に戻ってきた場合も、ガードの上にいるものとして扱う
-    onBackGuardRef.current = window.history.state?.[BACK_GUARD_KEY] === true;
+    onBackGuardRef.current = window.history.state?.[BACK_GUARD_KEY] === "guard";
+    /** キャンセル後の「進む」で起きる popstate を読み飛ばすための印 */
+    let returningToGuard = false;
     const onPopState = (event: PopStateEvent) => {
+      if (returningToGuard) {
+        returningToGuard = false;
+        onBackGuardRef.current = true;
+        event.stopImmediatePropagation();
+        return;
+      }
       if (!onBackGuardRef.current) return;
       onBackGuardRef.current = false;
+      // ベースを飛ばして別の画面へ戻った場合は、ここでは何もせず Next.js に任せる
+      if (window.history.state?.[BACK_GUARD_KEY] !== "base") return;
       // Next.js のルーターより先に受け取り、同じURLへの移動として処理させない
       event.stopImmediatePropagation();
       if (!isDirtyRef.current || window.confirm(LEAVE_MESSAGE)) {
         leavingRef.current = isDirtyRef.current;
         window.history.back();
       } else {
-        window.history.pushState({ [BACK_GUARD_KEY]: true }, "");
-        onBackGuardRef.current = true;
+        returningToGuard = true;
+        window.history.forward();
       }
     };
     window.addEventListener("popstate", onPopState, true);
@@ -174,7 +186,8 @@ export default function AssessmentForm({
 
   useEffect(() => {
     if (!isDirty || onBackGuardRef.current) return;
-    window.history.pushState({ [BACK_GUARD_KEY]: true }, "");
+    window.history.replaceState({ [BACK_GUARD_KEY]: "base" }, "");
+    window.history.pushState({ [BACK_GUARD_KEY]: "guard" }, "");
     onBackGuardRef.current = true;
   }, [isDirty]);
 
@@ -268,7 +281,7 @@ export default function AssessmentForm({
         setAssessmentId(data.id);
         // ガードの履歴の上なら目印を残す（「戻る」で新規作成の空の画面を挟まないため）
         window.history.replaceState(
-          onBackGuardRef.current ? { [BACK_GUARD_KEY]: true } : null,
+          onBackGuardRef.current ? { [BACK_GUARD_KEY]: "guard" } : null,
           "",
           `/assessment/${data.id}`,
         );
