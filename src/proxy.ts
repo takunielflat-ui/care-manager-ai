@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { hasAppAccess } from "@/lib/access";
+import { getAccessPlan, isAssessmentPath } from "@/lib/access";
 
 const PUBLIC_PATHS = ["/login"];
 
@@ -64,16 +64,24 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // 無料モニター期間中は、許可していないアカウントを案内ページへ回す。
-  // 許可済みの人が案内ページを開いた場合はトップへ戻す。
+  // 許可していないアカウントは案内ページへ回す。許可済みの人が案内ページを開いた場合はトップへ戻す。
+  // アセスメントだけの人（買い切り購入）は、アセスメント以外の画面を開いたらアセスメント一覧へ回す。
   if (user) {
-    const isNoAccessPath = request.nextUrl.pathname === NO_ACCESS_PATH;
-    const allowed = await hasAppAccess(supabase, user.email);
-    if (!allowed && !isNoAccessPath) {
+    const { pathname } = request.nextUrl;
+    const isNoAccessPath = pathname === NO_ACCESS_PATH;
+    const plan = await getAccessPlan(supabase, user.email);
+    if (!plan && !isNoAccessPath) {
       return NextResponse.redirect(new URL(NO_ACCESS_PATH, request.url));
     }
-    if (allowed && isNoAccessPath) {
+    if (plan === "assessment" && !isAssessmentPath(pathname)) {
+      return NextResponse.redirect(new URL("/assessment", request.url));
+    }
+    if (plan && isNoAccessPath) {
       return NextResponse.redirect(new URL("/", request.url));
+    }
+    if (plan) {
+      // 画面側（AppHeader のメニューなど）で使える範囲に合わせた表示にするため
+      requestHeaders.set("x-user-plan", plan);
     }
   }
 

@@ -24,17 +24,30 @@ const FULL_LINKS: MenuLink[] = [
  */
 const LIMITED_LINKS: MenuLink[] = [{ href: "/tools/tanni", label: "単位数電卓" }];
 
+/**
+ * アセスメントだけを購入した人のメニュー。
+ * それ以外の画面は proxy.ts でアセスメント一覧に戻されるため出さない。
+ */
+const ASSESSMENT_LINKS: MenuLink[] = [
+  { href: "/assessment", label: "アセスメント" },
+  { href: "/tools/tanni", label: "単位数電卓" },
+];
+
+const LINKS_BY_VARIANT = { full: FULL_LINKS, limited: LIMITED_LINKS, assessment: ASSESSMENT_LINKS };
+
+export type MenuVariant = keyof typeof LINKS_BY_VARIANT;
+
 export default function AppMenu({
   variant = "full",
   userEmail,
 }: {
-  variant?: "full" | "limited";
+  variant?: MenuVariant;
   userEmail?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const links = variant === "full" ? FULL_LINKS : LIMITED_LINKS;
+  const links = LINKS_BY_VARIANT[variant];
 
   // メニューの外をタップしたとき・Esc キーで閉じる
   useEffect(() => {

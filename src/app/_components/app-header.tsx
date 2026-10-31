@@ -1,6 +1,7 @@
+import { headers } from "next/headers";
 import Link from "next/link";
 
-import AppMenu from "./app-menu";
+import AppMenu, { type MenuVariant } from "./app-menu";
 
 /**
  * ログインが必要な画面で共通に使う上部バー。
@@ -8,8 +9,11 @@ import AppMenu from "./app-menu";
  * スクロールしていても1タップでトップに戻れるようにする。
  *
  * 単位数電卓（/tools/tanni）は公開ページで見た目も独自のため、これは使わない。
+ *
+ * アセスメントだけを購入した人（proxy.ts が付ける x-user-plan が "assessment"）には、
+ * 開ける画面だけのメニューを出し、「← トップ」の代わりに「← 一覧」（アセスメント一覧）を出す。
  */
-export default function AppHeader({
+export default async function AppHeader({
   title,
   description,
   userEmail,
@@ -27,6 +31,10 @@ export default function AppHeader({
   isTop?: boolean;
   menu?: "full" | "limited";
 }) {
+  const isAssessmentOnly = (await headers()).get("x-user-plan") === "assessment";
+  const menuVariant: MenuVariant = menu === "full" && isAssessmentOnly ? "assessment" : menu;
+  const back = isAssessmentOnly ? { href: "/assessment", label: "← 一覧" } : { href: "/", label: "← トップ" };
+
   return (
     <>
       <div className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
@@ -35,13 +43,13 @@ export default function AppHeader({
             <span className="text-base font-bold text-teal-800 dark:text-teal-300">ケアマネAI</span>
           ) : (
             <Link
-              href="/"
+              href={back.href}
               className="flex min-h-11 items-center rounded-lg px-1 text-base font-bold text-teal-700 underline-offset-2 hover:underline dark:text-teal-400"
             >
-              ← トップ
+              {back.label}
             </Link>
           )}
-          <AppMenu variant={menu} userEmail={userEmail} />
+          <AppMenu variant={menuVariant} userEmail={userEmail} />
         </div>
       </div>
 
