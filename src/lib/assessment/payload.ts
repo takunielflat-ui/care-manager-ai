@@ -5,8 +5,8 @@
  *  ★文章は画面から受け取らず、選んだ内容からここで作り直す（選択と文章を必ず一致させる）。
  *  ★テンプレートにない項目・選択肢は受け付けない。
  * ===================================================================== */
-import { buildAssessmentText, choicesFor } from "./build.ts";
-import { ITEMS, TEMPLATE_VERSION, type Selections } from "./templates.ts";
+import { buildAssessmentText, choicesFor, normalizeNote } from "./build.ts";
+import { ITEMS, NOTE_MAX, SECTIONS, TEMPLATE_VERSION, type Notes, type Selections } from "./templates.ts";
 
 export const DISPLAY_NAME_MAX = 20;
 export const FAMILY_MAX = 10;
@@ -19,6 +19,8 @@ export type AssessmentRow = {
   assessed_on: string;
   family: string[];
   selections: Selections;
+  /** セクションごとの備考（空のセクションは入れない） */
+  notes: Notes;
   include_unconfirmed: boolean;
   generated_text: string;
   template_version: number;
@@ -101,7 +103,21 @@ export function parseAssessmentPayload(body: unknown): ParseResult {
     selections[id] = value as string[];
   }
 
-  const built = buildAssessmentText({ selections, family, includeUnconfirmed });
+  // 備考は任意。送られてこなければ空とみなす（古い画面からの保存）
+  const rawNotes = b.notes ?? {};
+  if (typeof rawNotes !== "object" || rawNotes === null || Array.isArray(rawNotes)) {
+    return fail("リクエストの形式が不正です。");
+  }
+  const notes: Notes = {};
+  for (const [id, value] of Object.entries(rawNotes as Record<string, unknown>)) {
+    const section = SECTIONS.find((s) => s.id === id);
+    if (!section || typeof value !== "string") return fail("リクエストの形式が不正です。");
+    const note = normalizeNote(value);
+    if (note.length > NOTE_MAX) return fail(`「${section.title}」の備考は${NOTE_MAX}文字以内にしてください。`);
+    if (note !== "") notes[section.id] = note;
+  }
+
+  const built = buildAssessmentText({ selections, family, includeUnconfirmed, notes });
   return {
     ok: true,
     row: {
@@ -109,6 +125,7 @@ export function parseAssessmentPayload(body: unknown): ParseResult {
       assessed_on: assessedOn,
       family,
       selections,
+      notes,
       include_unconfirmed: includeUnconfirmed,
       generated_text: built.text,
       template_version: TEMPLATE_VERSION,

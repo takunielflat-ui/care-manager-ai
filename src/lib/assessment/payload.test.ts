@@ -42,8 +42,8 @@ test("正しい内容：DBに入れる形に整え、文章はサーバー側で
   assert.deepEqual(r.row.family, ["長女"]);
   assert.equal(r.row.selections.shokuji_suibun, "コップ5杯程度");
   assert.equal(r.row.template_version, TEMPLATE_VERSION);
-  assert.ok(r.row.generated_text.includes("屋内外とも、移動は杖（T字）使用で自立している。"));
-  assert.ok(r.row.generated_text.includes("調理は長女が行っている。"));
+  assert.ok(r.row.generated_text.includes("屋内外とも杖（T字）で自立。"));
+  assert.ok(r.row.generated_text.includes("調理は長女。"));
   assert.ok(!r.row.generated_text.includes("画面から送られた"));
   assert.ok(!r.row.generated_text.includes("未確認"));
   assert.equal(r.row.unconfirmed_count, 72 - 7);
@@ -92,4 +92,24 @@ test("形の崩れたリクエストは受け付けない", () => {
   assert.match(errorOf({ ...valid, selections: [] }), /形式/);
   assert.match(errorOf({ ...valid, includeUnconfirmed: "yes" }), /形式/);
   assert.match(errorOf({ ...valid, family: "長女" }), /続柄/);
+});
+
+test("備考：整えて保存し、文章のセクションの最後に付ける。空のセクションは入れない", () => {
+  const r = parseAssessmentPayload({ ...valid, notes: { ido: " 雨の日は外出しない。\n\n", kaji: "  " } });
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.deepEqual(r.row.notes, { ido: "雨の日は外出しない。" });
+  assert.ok(r.row.generated_text.includes("屋内外とも杖（T字）で自立。\n雨の日は外出しない。"));
+  // 備考は未確認の件数に関係しない
+  assert.equal(r.row.unconfirmed_count, 72 - 7);
+  // 送られてこなければ空（古い画面からの保存）
+  const old = parseAssessmentPayload(valid);
+  assert.ok(old.ok && Object.keys(old.row.notes).length === 0);
+});
+
+test("備考：ないセクション・文字以外・長すぎるものは受け付けない", () => {
+  assert.match(errorOf({ ...valid, notes: { unknown: "x" } }), /形式/);
+  assert.match(errorOf({ ...valid, notes: { kihon: 1 } }), /形式/);
+  assert.match(errorOf({ ...valid, notes: ["x"] }), /形式/);
+  assert.match(errorOf({ ...valid, notes: { kihon: "あ".repeat(301) } }), /基本動作.*300文字/);
 });

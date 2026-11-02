@@ -7,12 +7,14 @@
  * ===================================================================== */
 import {
   ITEMS,
+  JOINS,
   MERGE_GROUPS,
   MOVE_IDS,
   PAIRS,
   SECTIONS,
   type Choice,
   type Item,
+  type Notes,
   type Selections,
 } from "./templates.ts";
 
@@ -22,6 +24,8 @@ export type AssessmentInput = {
   family: string[];
   /** true: 【項目名：未確認】を文中に出す / false: 出さない */
   includeUnconfirmed: boolean;
+  /** セクションごとの備考。書いた内容をそのセクションの文章の最後にそのまま付ける */
+  notes?: Notes;
 };
 
 export type AssessmentResult = {
@@ -56,6 +60,18 @@ function withRelation(ch: Choice, rel: string): Choice {
 }
 
 /**
+ * 備考を文章に付けられる形にする：前後の空白を取り、空行は詰める。
+ * （セクションの区切りは空行なので、備考の中に空行があると貼り付け用の分割が崩れる）
+ */
+export function normalizeNote(note: string | undefined): string {
+  return (note ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+/**
  * 選んだ値を選択肢に引き当てる。未回答・選択肢にない値は null（＝未確認）。
  * 複数選択は選択肢の並び順にそろえ、「特になし」は他と一緒なら外す。
  */
@@ -80,18 +96,21 @@ const sayOf = (picked: Choice[]) => picked.map((p) => p.say ?? p.value).join("�
 const mergeKey = (picked: Choice[] | null) =>
   picked && !picked.some((p) => p.full) ? sayOf(picked) : null;
 
-function sentenceOf(item: Item, picked: Choice[], suffix = ""): string {
+/** 「寝返りは自立。」／「尿意あり。」（bare の選択肢は「は」を付けない） */
+const subjectSentence = (subject: string, picked: Choice[]) =>
+  `${subject}${picked.some((p) => p.bare) ? "" : "は"}${sayOf(picked)}。`;
+
+function sentenceOf(item: Item, picked: Choice[]): string {
   if (item.render && !picked[0].none) return item.render(picked);
   if (picked.length === 1 && picked[0].full) return picked[0].full;
-  const s = sayOf(picked);
-  if (item.subject) return `${item.subject}${suffix}は${s}。`;
-  return item.sentence!(s);
+  if (item.subject) return subjectSentence(item.subject, picked);
+  return item.sentence!(sayOf(picked));
 }
 
 type Piece = { text: string } | { missing: string };
 
 export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
-  const { selections: sel, family, includeUnconfirmed } = input;
+  const { selections: sel, family, includeUnconfirmed, notes = {} } = input;
   const unconfirmedItems: string[] = [];
   const unconfirmedIds: string[] = [];
   const blocks: string[] = [];
@@ -118,6 +137,20 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
         continue;
       }
 
+      // いつも1文にする組（例：通所サービスで週2回入浴。）
+      const join = JOINS.find((j) => j.a === item.id);
+      if (join) {
+        done.add(join.b);
+        const other = byId.get(join.b)!;
+        const a = picks.get(item.id)?.[0] ?? null;
+        const b = picks.get(join.b)?.[0] ?? null;
+        if (!a && !item.optional) missing(item);
+        const text = join.render(a, b);
+        if (text) pieces.push({ text });
+        if (!b && !other.optional) missing(other);
+        continue;
+      }
+
       const picked = picks.get(item.id)!;
       if (!picked) {
         if (!item.optional) missing(item);
@@ -135,7 +168,7 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
         }
       }
 
-      // 同じ値を選んだ項目は1文（例：寝返り・起き上がりは自立している。）
+      // 同じ値を選んだ項目は1文（例：寝返り・起き上がりは自立。）
       const group = MERGE_GROUPS.find((g) => g.ids.includes(item.id));
       if (group) {
         const key = mergeKey(picked);
@@ -145,11 +178,9 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
         if (same.length > 0) {
           same.forEach((other) => done.add(other.id));
           const subjects = [item, ...same].map((i) => i.subject).join("・");
-          pieces.push({ text: `${subjects}${group.suffix ?? ""}は${key}。` });
+          pieces.push({ text: subjectSentence(subjects, picked) });
           continue;
         }
-        pieces.push({ text: sentenceOf(item, picked, group.suffix) });
-        continue;
       }
 
       pieces.push({ text: sentenceOf(item, picked) });
@@ -158,7 +189,10 @@ export function buildAssessmentText(input: AssessmentInput): AssessmentResult {
     const body = pieces
       .map((p) => ("text" in p ? p.text : includeUnconfirmed ? `【${p.missing}：未確認】` : ""))
       .join("");
-    if (body) blocks.push(`【${section.title}】\n${body}`);
+    // 備考は選択から作った文の後ろに、改行してそのまま付ける
+    const note = normalizeNote(notes[section.id]);
+    const full = [body, note].filter((s) => s !== "").join("\n");
+    if (full) blocks.push(`【${section.title}】\n${full}`);
   }
 
   return {
@@ -183,7 +217,7 @@ export function splitSections(text: string): { title: string; body: string }[] {
 
 /**
  * 移動：屋内・屋外それぞれ「使うもの」と「介助の程度」から1文。
- * 屋内と屋外が両方とも同じなら「屋内外とも、移動は〜」の1文にまとめる。
+ * 屋内と屋外が両方とも同じなら「屋内外とも杖（T字）で自立。」の1文にまとめる。
  */
 function movement(
   picks: Map<string, Choice[] | null>,
@@ -198,11 +232,7 @@ function movement(
   const outTool = one(MOVE_IDS.outTool);
   const outLevel = one(MOVE_IDS.outLevel);
 
-  const heads = {
-    in: { prefix: "屋内の移動は", head: "屋内は" },
-    out: { prefix: "屋外の移動は", head: "屋外は" },
-    both: { prefix: "屋内外とも、移動は", head: "屋内外とも、" },
-  };
+  const heads = { in: "屋内は", out: "屋外は", both: "屋内外とも" };
 
   const line = (
     place: keyof typeof heads,
@@ -211,7 +241,7 @@ function movement(
     toolId: string,
     levelId: string,
   ) => {
-    const { prefix, head } = heads[place];
+    const head = heads[place];
     if (tool?.full) {
       pieces.push({ text: tool.full });
       return;
@@ -219,12 +249,12 @@ function movement(
     if (!tool) missing(byId.get(toolId)!);
     if (tool && level) {
       pieces.push({
-        text: level.tebiki ? `${head}${tool.use}手引きで移動している。` : `${prefix}${tool.means}${level.say}。`,
+        text: level.tebiki ? `${head}${tool.use}手引きで移動。` : `${head}${tool.means}${level.value}。`,
       });
     } else if (tool) {
-      pieces.push({ text: `${prefix}${tool.alone}。` });
+      pieces.push({ text: `${head}${tool.alone}。` });
     } else if (level) {
-      pieces.push({ text: level.tebiki ? `${head}手引きで移動している。` : `${prefix}${level.say}。` });
+      pieces.push({ text: level.tebiki ? `${head}手引きで移動。` : `${head}${level.value}。` });
     }
     const levelSkipped = byId.get(levelId)!.skipIf?.(sel);
     if (!level && !levelSkipped) missing(byId.get(levelId)!);
