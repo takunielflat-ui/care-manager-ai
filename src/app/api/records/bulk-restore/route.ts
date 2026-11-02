@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireFeature } from "@/lib/api-auth";
 
 const MAX_IDS = 200;
 
@@ -13,14 +13,9 @@ function isIdArray(value: unknown): value is string[] {
 
 /** 一括削除の「元に戻す」用。deleted_at を null に戻す。 */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase } = auth;
 
   let body: { ids?: unknown };
   try {

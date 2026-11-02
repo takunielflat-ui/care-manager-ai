@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireFeature } from "@/lib/api-auth";
 import type { Category } from "@/lib/anonymize";
 
 const VALID_CATEGORIES = ["person", "hospital", "facility", "place"] as const;
@@ -8,14 +8,9 @@ function isValidCategory(value: unknown): value is Category {
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("known_names")
@@ -31,14 +26,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase, user } = auth;
 
   let body: { category?: unknown; name?: unknown };
   try {

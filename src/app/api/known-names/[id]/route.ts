@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireFeature } from "@/lib/api-auth";
 
 export async function DELETE(
   request: Request,
@@ -6,14 +6,9 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase } = auth;
 
   const { error } = await supabase.from("known_names").delete().eq("id", id);
 

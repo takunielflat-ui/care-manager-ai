@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireFeature } from "@/lib/api-auth";
 
 const MAX_CANNED_PHRASES = 20;
 const MAX_BODY_LENGTH = 500;
@@ -8,14 +8,9 @@ function isValidSortOrder(value: unknown): value is number {
 }
 
 export async function GET() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase } = auth;
 
   const { data, error } = await supabase
     .from("canned_phrases")
@@ -32,14 +27,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase, user } = auth;
 
   let body: { body?: unknown; sortOrder?: unknown };
   try {

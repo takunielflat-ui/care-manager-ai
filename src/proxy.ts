@@ -1,12 +1,9 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getAccessPlan, isAssessmentPath } from "@/lib/access";
+import { getFeatures, redirectFor, setTrustedHeaders, type Feature } from "@/lib/access";
 
 const PUBLIC_PATHS = ["/login"];
-
-/** 許可されていないアカウントに見せる案内ページ */
-const NO_ACCESS_PATH = "/no-access";
 
 /** ログイン不要で公開するツール群。配下のパスもまとめて対象外にする。 */
 const PUBLIC_PATH_PREFIXES = ["/tools/tanni"];
@@ -16,20 +13,20 @@ const isPublicPrefixPath = (pathname: string) =>
 /**
  * 全ページリクエストでSupabaseセッションをリフレッシュし、
  * 未ログイン時は /login へ、ログイン済みで /login にいる場合は / へ誘導する。
- * /api/* はここでは扱わない。各Route Handlerが個別に認証を確認する。
+ * /api/* はここでは扱わない。各Route Handlerが個別に認証と権限を確認する。
  *
- * ここで確認したユーザー情報は x-user-email ヘッダーに載せてページ側に渡す。
- * 各ページで改めて supabase.auth.getUser() を呼ぶと認証サーバーへの
- * ネットワーク往復が二重になるため、ページ側はこのヘッダーを読むだけにする。
+ * ログイン済みの人は、使える機能（user_entitlements）に合わせて画面を振り分ける（src/lib/access.ts）。
+ * 確認した結果は x-user-email / x-user-features ヘッダーに載せてページ側に渡す。
+ * 外から同じ名前のヘッダーが送られてきても、必ず消してから上書きする（setTrustedHeaders）。
  */
 export async function proxy(request: NextRequest) {
   // 無料公開ツール（SNS・検索流入の入口）。認証を確認せず、
-  // Supabaseへの往復も省いて高速に返す。
+  // Supabaseへの往復も省いて高速に返す。偽のヘッダーだけは消しておく。
   if (isPublicPrefixPath(request.nextUrl.pathname)) {
-    return NextResponse.next();
+    const headers = setTrustedHeaders(new Headers(request.headers), { features: null, email: null });
+    return NextResponse.next({ request: { headers } });
   }
 
-  const requestHeaders = new Headers(request.headers);
   let cookiesToApply: { name: string; value: string; options: CookieOptions }[] = [];
 
   const supabase = createServerClient(
@@ -64,30 +61,19 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  // 許可していないアカウントは案内ページへ回す。許可済みの人が案内ページを開いた場合はトップへ戻す。
-  // アセスメントだけの人（買い切り購入）は、アセスメント以外の画面を開いたらアセスメント一覧へ回す。
+  // 使える機能に合わない画面は、開ける画面へ回す（権限なし → 案内ページ、アセスメントの権限なし → 購入案内）
+  let features: Set<Feature> | null = null;
   if (user) {
-    const { pathname } = request.nextUrl;
-    const isNoAccessPath = pathname === NO_ACCESS_PATH;
-    const plan = await getAccessPlan(supabase, user.email);
-    if (!plan && !isNoAccessPath) {
-      return NextResponse.redirect(new URL(NO_ACCESS_PATH, request.url));
-    }
-    if (plan === "assessment" && !isAssessmentPath(pathname)) {
-      return NextResponse.redirect(new URL("/assessment", request.url));
-    }
-    if (plan && isNoAccessPath) {
-      return NextResponse.redirect(new URL("/", request.url));
-    }
-    if (plan) {
-      // 画面側（AppHeader のメニューなど）で使える範囲に合わせた表示にするため
-      requestHeaders.set("x-user-plan", plan);
-    }
+    features = await getFeatures(supabase, user);
+    const to = redirectFor(request.nextUrl.pathname, features);
+    if (to) return NextResponse.redirect(new URL(to, request.url));
   }
 
-  if (user?.email) {
-    requestHeaders.set("x-user-email", user.email);
-  }
+  // request.cookies.set() の結果を含めるため、ヘッダーはここで作る
+  const requestHeaders = setTrustedHeaders(new Headers(request.headers), {
+    features,
+    email: user?.email ?? null,
+  });
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   for (const { name, value, options } of cookiesToApply) {
