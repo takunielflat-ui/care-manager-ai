@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireFeature } from "@/lib/api-auth";
 
 type CreateRecordPayload = {
   visitDate?: string;
@@ -8,17 +8,14 @@ type CreateRecordPayload = {
 };
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-
-  // 認証確認とボディのパースは互いに依存しないので、並行に行って保存の体感速度を上げる。
-  const [{ data: { user } }, parsedBody] = await Promise.all([
-    supabase.auth.getUser(),
+  // 権限の確認とボディのパースは互いに依存しないので、並行に行って保存の体感速度を上げる。
+  const [auth, parsedBody] = await Promise.all([
+    requireFeature("fifth_sheet"),
     request.json().catch(() => null),
   ]);
 
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  if (auth instanceof Response) return auth;
+  const { supabase, user } = auth;
 
   if (parsedBody === null) {
     return Response.json({ error: "リクエストの形式が不正です。" }, { status: 400 });

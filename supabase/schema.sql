@@ -294,3 +294,62 @@ alter table public.allowed_emails
 
 alter table public.assessments
   add column notes jsonb not null default '{}'::jsonb;
+
+-- care-manager-ai: user_entitlements（使える機能＝権限）テーブルとRLSポリシー
+-- 1人1機能につき1行。行があって期限内なら、その機能を使える（判定は src/lib/access.ts）。
+--   feature    … 'assessment'（アセスメント）／'fifth_sheet'（経過記録＝AIの課金を伴う）
+--   source     … 'monitor'（モニター）／'purchase'（購入）
+--   granted_at … 付与した日時
+--   expires_at … 利用期限。空欄なら無期限（買い切りの人は空欄）。過ぎると権限なし
+--   note       … メモ（Stripeの日付など。任意）
+-- 本人は自分の行を読むだけ。追加・変更・削除のポリシーは作らない
+-- ＝アプリからは書き込めず、運営者が SQL Editor / Table Editor で管理する
+-- （付与・一覧・取り消しのSQLは supabase/entitlements-admin.sql）。
+-- これを入れると allowed_emails（モニター名簿）と plan 列はアプリから使われなくなる（表は当面残す）。
+-- ★アプリの公開「前」に、この部分 → 下の移行の順で実行すること（先に公開すると運営者以外が締め出される）。
+
+create table public.user_entitlements (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  feature text not null check (feature in ('assessment', 'fifth_sheet')),
+  source text not null check (source in ('monitor', 'purchase')),
+  granted_at timestamptz not null default now(),
+  expires_at timestamptz,
+  note text,
+  primary key (user_id, feature)
+);
+
+alter table public.user_entitlements enable row level security;
+
+create policy "select own entitlements"
+  on public.user_entitlements for select
+  using (auth.uid() = user_id);
+
+-- 移行：allowed_emails（モニター名簿）の人に、今までどおり使えるよう権限を付ける。
+-- plan が 'full'（または空）の人 → アセスメントと経過記録の両方（source = monitor、期限は名簿のまま）
+-- plan が 'assessment' の人 → アセスメントだけ（source = purchase）
+-- 一度もログインしていない人はユーザーIDがないため付けられない（下の確認SQLで一覧を出す）。
+
+insert into public.user_entitlements (user_id, feature, source, expires_at, note)
+select u.id, f.feature, 'monitor', a.expires_at, a.note
+from public.allowed_emails a
+join auth.users u on lower(u.email) = lower(a.email)
+cross join (values ('assessment'), ('fifth_sheet')) as f(feature)
+where coalesce(a.plan, 'full') = 'full'
+on conflict (user_id, feature) do nothing;
+
+insert into public.user_entitlements (user_id, feature, source, expires_at, note)
+select u.id, 'assessment', 'purchase', a.expires_at, a.note
+from public.allowed_emails a
+join auth.users u on lower(u.email) = lower(a.email)
+where a.plan = 'assessment'
+on conflict (user_id, feature) do nothing;
+
+-- 確認1：移した件数（メールアドレスごと）
+-- select u.email, string_agg(e.feature, ', ' order by e.feature) as features, min(e.expires_at) as expires_at
+-- from public.user_entitlements e join auth.users u on u.id = e.user_id
+-- group by u.email order by u.email;
+
+-- 確認2：名簿にいるが、まだ一度もログインしていないため移せなかった人
+-- select a.email, a.plan, a.expires_at, a.note
+-- from public.allowed_emails a
+-- where not exists (select 1 from auth.users u where lower(u.email) = lower(a.email));

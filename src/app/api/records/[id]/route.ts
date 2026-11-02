@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireFeature } from "@/lib/api-auth";
 
 const VALID_STATUSES = ["pending", "copied"] as const;
 type RecordStatus = (typeof VALID_STATUSES)[number];
@@ -13,14 +13,9 @@ export async function PATCH(
 ) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase } = auth;
 
   let body: { status?: unknown; generatedText?: unknown };
   try {
@@ -72,14 +67,9 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase } = auth;
 
   // 開示請求・運営指導の対象になりうる記録のため、物理削除ではなく論理削除にする。
   const { error } = await supabase

@@ -4,8 +4,8 @@ import {
   buildFifthSheetUserMessage,
   getFifthSheetSystemPrompt,
 } from "@/prompts/fifthSheetPrompt";
-import { createClient } from "@/lib/supabase/server";
-import { getAccessPlan, isUnlimitedEmail } from "@/lib/access";
+import { isUnlimitedEmail } from "@/lib/access";
+import { requireFeature } from "@/lib/api-auth";
 import {
   anonymizeForAI,
   clearRestoreMap,
@@ -99,29 +99,11 @@ function toUserMessage(error: unknown) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return Response.json({ error: "ログインが必要です。" }, { status: 401 });
-  }
-
-  // 許可したメールアドレスのうち、すべての機能を使える人だけが生成（＝課金）を使える。
-  // アセスメントだけの購入者は使えない。
-  const plan = await getAccessPlan(supabase, user.email);
-  if (plan !== "full") {
-    return Response.json(
-      {
-        error:
-          plan === "assessment"
-            ? "第5表の作成は、ご利用中のプランには含まれていません。"
-            : "現在は無料モニターの方だけがご利用いただけます。",
-      },
-      { status: 403 },
-    );
-  }
+  // 経過記録の権限（fifth_sheet）が今ある人だけが生成（＝課金）を使える。
+  // 権限は毎回データベースで確かめる（ヘッダーには頼らない）。期限切れ・アセスメントだけの人は使えない。
+  const auth = await requireFeature("fifth_sheet");
+  if (auth instanceof Response) return auth;
+  const { supabase, user } = auth;
 
   let body: ClientPayload;
 

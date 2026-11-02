@@ -1,11 +1,11 @@
 import { parseAssessmentPayload } from "@/lib/assessment/payload";
-import { requireMember } from "./_lib";
+import { requireFeature } from "@/lib/api-auth";
 
 /** アセスメントを新しく保存する。AI は使わない */
 export async function POST(request: Request) {
-  const auth = await requireMember();
+  const auth = await requireFeature("assessment");
   if (auth instanceof Response) return auth;
-  const { supabase, userId } = auth;
+  const { supabase, user } = auth;
 
   const body = await request.json().catch(() => null);
   const parsed = parseAssessmentPayload(body);
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("assessments")
-    .insert({ ...parsed.row, user_id: userId })
+    .insert({ ...parsed.row, user_id: user.id })
     .select("id")
     .single();
 

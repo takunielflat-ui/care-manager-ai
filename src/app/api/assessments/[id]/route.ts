@@ -1,5 +1,6 @@
 import { parseAssessmentPayload } from "@/lib/assessment/payload";
-import { isUuid, requireMember } from "../_lib";
+import { requireFeature } from "@/lib/api-auth";
+import { isUuid } from "../_lib";
 
 const NOT_FOUND = () =>
   Response.json({ error: "アセスメントが見つかりません。" }, { status: 404 });
@@ -12,7 +13,7 @@ export async function PATCH(
   const { id } = await params;
   if (!isUuid(id)) return NOT_FOUND();
 
-  const auth = await requireMember();
+  const auth = await requireFeature("assessment");
   if (auth instanceof Response) return auth;
   const { supabase } = auth;
 
@@ -47,7 +48,7 @@ export async function DELETE(
   const { id } = await params;
   if (!isUuid(id)) return NOT_FOUND();
 
-  const auth = await requireMember();
+  const auth = await requireFeature("assessment");
   if (auth instanceof Response) return auth;
   const { supabase } = auth;
 

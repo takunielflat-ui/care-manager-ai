@@ -4,50 +4,37 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import type { Feature } from "@/lib/access";
 import LogoutButton from "./logout-button";
 
-type MenuLink = { href: string; label: string };
-
-/** ログインして利用を許可されている人のメニュー */
-const FULL_LINKS: MenuLink[] = [
-  { href: "/", label: "訪問記録の入力（トップ）" },
-  { href: "/assessment", label: "アセスメント" },
-  { href: "/records", label: "記録一覧" },
-  { href: "/tools/tanni", label: "単位数電卓" },
-  { href: "/settings", label: "辞書設定" },
-  { href: "/help", label: "使い方" },
-];
+type MenuLink = { href: string; label: string; feature?: Feature };
 
 /**
- * 利用の許可がまだの人（no-access）のメニュー。
- * それ以外の画面は proxy.ts で案内ページに戻されるため出さない。
+ * メニューの項目。feature がある項目は、その機能の権限がある人にだけ出す
+ * （出さない画面は proxy.ts で開けないようにしてある。ここは見た目を合わせるだけ）。
+ * 単位数電卓はログインなしでも使えるので、いつも出す。
  */
-const LIMITED_LINKS: MenuLink[] = [{ href: "/tools/tanni", label: "単位数電卓" }];
-
-/**
- * アセスメントだけを購入した人のメニュー。
- * それ以外の画面は proxy.ts でアセスメント一覧に戻されるため出さない。
- */
-const ASSESSMENT_LINKS: MenuLink[] = [
-  { href: "/assessment", label: "アセスメント" },
+const LINKS: MenuLink[] = [
+  { href: "/", label: "訪問記録の入力（トップ）", feature: "fifth_sheet" },
+  { href: "/assessment", label: "アセスメント", feature: "assessment" },
+  { href: "/records", label: "記録一覧", feature: "fifth_sheet" },
   { href: "/tools/tanni", label: "単位数電卓" },
+  { href: "/settings", label: "辞書設定", feature: "fifth_sheet" },
+  { href: "/help", label: "使い方", feature: "fifth_sheet" },
 ];
-
-const LINKS_BY_VARIANT = { full: FULL_LINKS, limited: LIMITED_LINKS, assessment: ASSESSMENT_LINKS };
-
-export type MenuVariant = keyof typeof LINKS_BY_VARIANT;
 
 export default function AppMenu({
-  variant = "full",
+  features,
   userEmail,
 }: {
-  variant?: MenuVariant;
+  /** 使える機能（proxy.ts が確かめたもの） */
+  features: Feature[];
   userEmail?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const links = LINKS_BY_VARIANT[variant];
+  const links = LINKS.filter((link) => !link.feature || features.includes(link.feature));
 
   // メニューの外をタップしたとき・Esc キーで閉じる
   useEffect(() => {

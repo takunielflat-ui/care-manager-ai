@@ -1,24 +1,25 @@
 import { headers } from "next/headers";
 import Link from "next/link";
 
-import AppMenu, { type MenuVariant } from "./app-menu";
+import { FEATURES_HEADER, homePath, parseFeaturesHeader } from "@/lib/access";
+import AppMenu from "./app-menu";
 
 /**
  * ログインが必要な画面で共通に使う上部バー。
- * 左端は「← トップ」、右端は「☰ メニュー」。バーは画面上に固定し、
- * スクロールしていても1タップでトップに戻れるようにする。
+ * 左端は戻るリンク、右端は「☰ メニュー」。バーは画面上に固定し、
+ * スクロールしていても1タップで最初の画面に戻れるようにする。
  *
  * 単位数電卓（/tools/tanni）は公開ページで見た目も独自のため、これは使わない。
  *
- * アセスメントだけを購入した人（proxy.ts が付ける x-user-plan が "assessment"）には、
- * 開ける画面だけのメニューを出し、「← トップ」の代わりに「← 一覧」（アセスメント一覧）を出す。
+ * メニューと戻るリンクは、proxy.ts が確かめて渡す使える機能（x-user-features）に合わせる。
+ * 経過記録の権限があれば「← トップ」、アセスメントだけなら「← 一覧」（アセスメント一覧）。
+ * ここは見た目を合わせるだけで、開けるかどうかは proxy.ts と API が決める。
  */
 export default async function AppHeader({
   title,
   description,
   userEmail,
   isTop = false,
-  menu = "full",
   children,
 }: {
   title: string;
@@ -27,19 +28,19 @@ export default async function AppHeader({
   children?: React.ReactNode;
   /** メニューを開いたときに出すログイン中のメールアドレス */
   userEmail?: string | null;
-  /** トップ画面自身では「← トップ」の代わりにアプリ名を出す */
+  /** トップ画面自身では戻るリンクの代わりにアプリ名を出す */
   isTop?: boolean;
-  menu?: "full" | "limited";
 }) {
-  const isAssessmentOnly = (await headers()).get("x-user-plan") === "assessment";
-  const menuVariant: MenuVariant = menu === "full" && isAssessmentOnly ? "assessment" : menu;
-  const back = isAssessmentOnly ? { href: "/assessment", label: "← 一覧" } : { href: "/", label: "← トップ" };
+  const features = parseFeaturesHeader((await headers()).get(FEATURES_HEADER));
+  const home = homePath(features);
+  const back =
+    home === "/" ? { href: "/", label: "← トップ" } : home === "/assessment" ? { href: "/assessment", label: "← 一覧" } : null;
 
   return (
     <>
       <div className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 pt-[env(safe-area-inset-top)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mx-auto flex h-16 w-full max-w-xl items-center justify-between gap-3 px-4">
-          {isTop ? (
+          {isTop || !back ? (
             <span className="text-base font-bold text-teal-800 dark:text-teal-300">ケアマネAI</span>
           ) : (
             <Link
@@ -49,7 +50,7 @@ export default async function AppHeader({
               {back.label}
             </Link>
           )}
-          <AppMenu variant={menuVariant} userEmail={userEmail} />
+          <AppMenu features={[...features]} userEmail={userEmail} />
         </div>
       </div>
 
