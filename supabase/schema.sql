@@ -328,20 +328,21 @@ create policy "select own entitlements"
 -- plan が 'full'（または空）の人 → アセスメントと経過記録の両方（source = monitor、期限は名簿のまま）
 -- plan が 'assessment' の人 → アセスメントだけ（source = purchase）
 -- 一度もログインしていない人はユーザーIDがないため付けられない（下の確認SQLで一覧を出す）。
+-- plan 列を追加していないDBでも動くよう、plan は to_jsonb で読む（列がなければ 'full' 扱い）。
 
 insert into public.user_entitlements (user_id, feature, source, expires_at, note)
 select u.id, f.feature, 'monitor', a.expires_at, a.note
 from public.allowed_emails a
 join auth.users u on lower(u.email) = lower(a.email)
 cross join (values ('assessment'), ('fifth_sheet')) as f(feature)
-where coalesce(a.plan, 'full') = 'full'
+where coalesce(to_jsonb(a) ->> 'plan', 'full') = 'full'
 on conflict (user_id, feature) do nothing;
 
 insert into public.user_entitlements (user_id, feature, source, expires_at, note)
 select u.id, 'assessment', 'purchase', a.expires_at, a.note
 from public.allowed_emails a
 join auth.users u on lower(u.email) = lower(a.email)
-where a.plan = 'assessment'
+where to_jsonb(a) ->> 'plan' = 'assessment'
 on conflict (user_id, feature) do nothing;
 
 -- 確認1：移した件数（メールアドレスごと）
@@ -350,6 +351,6 @@ on conflict (user_id, feature) do nothing;
 -- group by u.email order by u.email;
 
 -- 確認2：名簿にいるが、まだ一度もログインしていないため移せなかった人
--- select a.email, a.plan, a.expires_at, a.note
+-- select a.email, to_jsonb(a) ->> 'plan' as plan, a.expires_at, a.note
 -- from public.allowed_emails a
 -- where not exists (select 1 from auth.users u where lower(u.email) = lower(a.email));
