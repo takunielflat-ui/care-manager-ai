@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { todayInJapan } from "@/lib/date";
-import type { Selections } from "@/lib/assessment/templates";
+import type { Notes, Selections } from "@/lib/assessment/templates";
 import { createClient } from "@/lib/supabase/server";
 import AppHeader from "../../_components/app-header";
 import AssessmentForm from "../_components/assessment-form";
@@ -24,7 +24,7 @@ export default async function AssessmentEditPage({ params }: { params: Promise<{
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("assessments")
-    .select("id, display_name, assessed_on, family, selections, include_unconfirmed, generated_text, template_version")
+    .select("id, display_name, assessed_on, family, selections, notes, include_unconfirmed, generated_text, template_version")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
@@ -47,6 +47,7 @@ export default async function AssessmentEditPage({ params }: { params: Promise<{
             assessedOn: data.assessed_on,
             family: data.family as string[],
             selections: data.selections as Selections,
+            notes: (data.notes ?? {}) as Notes,
             includeUnconfirmed: data.include_unconfirmed,
             generatedText: data.generated_text,
             templateVersion: data.template_version,

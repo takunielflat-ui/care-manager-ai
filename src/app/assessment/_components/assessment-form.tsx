@@ -9,9 +9,11 @@ import { DISPLAY_NAME_MAX } from "@/lib/assessment/payload";
 import { dropUnavailable, toggleChoice } from "@/lib/assessment/selection";
 import {
   ITEMS,
+  NOTE_MAX,
   SECTIONS,
   TEMPLATE_VERSION,
   type Item,
+  type Notes,
   type SectionId,
   type Selections,
 } from "@/lib/assessment/templates";
@@ -33,6 +35,7 @@ export type SavedAssessment = {
   assessedOn: string;
   family: string[];
   selections: Selections;
+  notes: Notes;
   includeUnconfirmed: boolean;
   generatedText: string;
   templateVersion: number;
@@ -43,6 +46,7 @@ type Snapshot = {
   assessedOn: string;
   family: string[];
   selections: Selections;
+  notes: Notes;
   includeUnconfirmed: boolean;
 };
 
@@ -70,6 +74,11 @@ export default function AssessmentForm({
   // 介護ソフトに貼る文章に【〇〇：未確認】が混ざらないよう、新規作成では最初は入れない。
   // 何が未確認かはセクションの見出しと「未確認 ◯件」で分かる。保存済みのものは保存時の設定に従う
   const [includeUnconfirmed, setIncludeUnconfirmed] = useState(saved?.includeUnconfirmed ?? false);
+  const [notes, setNotes] = useState<Notes>(() => saved?.notes ?? {});
+  // 備考欄は最初は閉じておく。保存済みの備考があるセクションだけ開いておく（書いた内容が見えるように）
+  const [openNotes, setOpenNotes] = useState<Set<SectionId>>(
+    () => new Set(SECTIONS.filter((s) => (saved?.notes?.[s.id] ?? "") !== "").map((s) => s.id)),
+  );
   const [openSections, setOpenSections] = useState<Set<SectionId>>(() => new Set(["kihon"]));
   /** コピーしたもの："all"（全部）またはセクション名。少し置いて null に戻す */
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -81,15 +90,15 @@ export default function AssessmentForm({
   const [nameError, setNameError] = useState("");
   const [showSavedToast, setShowSavedToast] = useState(false);
 
-  const current: Snapshot = { displayName, assessedOn, family, selections, includeUnconfirmed };
+  const current: Snapshot = { displayName, assessedOn, family, selections, notes, includeUnconfirmed };
   const currentKey = snapshotKey(current);
   // 最後に保存した（または開いた）ときの状態。新規作成なら最初の空の状態
   const [savedKey, setSavedKey] = useState(() => currentKey);
   const isDirty = currentKey !== savedKey;
 
   const built = useMemo(
-    () => buildAssessmentText({ selections, family, includeUnconfirmed }),
-    [selections, family, includeUnconfirmed],
+    () => buildAssessmentText({ selections, family, includeUnconfirmed, notes }),
+    [selections, family, includeUnconfirmed, notes],
   );
   // 以前の版のテンプレートで保存したものは、何も変えていない間は保存した文章をそのまま見せる。
   // 選び直したら、今の版で作り直す。
@@ -221,6 +230,16 @@ export default function AssessmentForm({
     const value = name.trim();
     if (value === "" || value === "家族" || family.includes(value)) return;
     changeFamily([...family, value]);
+  }
+
+  function changeNote(id: SectionId, value: string) {
+    setNotes((prev) => {
+      const next = { ...prev };
+      // 空にしたら消しておく（何も書いていない状態と同じにして、保存していない変更と見なさない）
+      if (value === "") delete next[id];
+      else next[id] = value;
+      return next;
+    });
   }
 
   function toggleSection(id: SectionId) {
@@ -496,6 +515,14 @@ export default function AssessmentForm({
                       onChange={(value) => setSelections((sel) => toggleChoice(sel, item, value))}
                     />
                   ))}
+                  <NoteField
+                    sectionId={section.id}
+                    title={section.title}
+                    open={openNotes.has(section.id)}
+                    value={notes[section.id] ?? ""}
+                    onOpen={() => setOpenNotes((prev) => new Set(prev).add(section.id))}
+                    onChange={(value) => changeNote(section.id, value)}
+                  />
                 </div>
               )}
             </section>
@@ -715,6 +742,68 @@ function ItemField({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+/** セクションの最後の備考欄。「＋備考」を押すと開く。任意で、未確認には数えない */
+function NoteField({
+  sectionId,
+  title,
+  open,
+  value,
+  onOpen,
+  onChange,
+}: {
+  sectionId: SectionId;
+  title: string;
+  open: boolean;
+  value: string;
+  onOpen: () => void;
+  onChange: (value: string) => void;
+}) {
+  const inputId = `assessment-note-${sectionId}`;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  if (!open) {
+    return (
+      <div className="px-4 py-3">
+        <button
+          type="button"
+          onClick={() => {
+            // 開いた欄がすぐ書ける状態になるよう、画面に出てからフォーカスする
+            flushSync(onOpen);
+            textareaRef.current?.focus();
+          }}
+          aria-label={`${title}に備考を書く`}
+          className="min-h-11 rounded-lg border border-dashed border-zinc-400 bg-white px-4 text-base font-medium text-zinc-700 hover:border-teal-600 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-200"
+        >
+          ＋備考
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 px-4 py-4">
+      <label htmlFor={inputId} className="flex flex-wrap items-center gap-2">
+        <span className="text-base font-bold text-zinc-900 dark:text-zinc-50">備考</span>
+        <span className="text-sm text-zinc-500 dark:text-zinc-400">（任意）</span>
+      </label>
+      <textarea
+        ref={textareaRef}
+        id={inputId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={3}
+        maxLength={NOTE_MAX}
+        placeholder="利用者・家族の氏名は書かないでください"
+        aria-describedby={`${inputId}-help`}
+        className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-base leading-relaxed text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+      />
+      <p id={`${inputId}-help`} className="text-sm text-zinc-600 dark:text-zinc-400">
+        書いた内容は、このセクションの文章の最後にそのまま付きます（{NOTE_MAX}文字まで）。
+      </p>
     </div>
   );
 }

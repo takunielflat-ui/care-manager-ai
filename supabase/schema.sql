@@ -284,3 +284,13 @@ create policy "update own assessments"
 alter table public.allowed_emails
   add column plan text not null default 'full'
   check (plan in ('full', 'assessment'));
+
+-- care-manager-ai: assessments に「備考」（notes）を追加
+-- セクションごとの自由記述。例：{"kihon": "…", "ninchi": "…"}。書いていないセクションは入れない。
+-- 文章（generated_text）の各セクションの最後にそのまま付く。外部の AI には送らない。
+-- 既存の行は {}（備考なし）になる。
+-- ★アプリが保存・表示でこの列を使うため、デプロイの「前」に実行すること。
+-- 既に assessments を作成済みの場合は、この部分だけを追加実行すればよい。
+
+alter table public.assessments
+  add column notes jsonb not null default '{}'::jsonb;
