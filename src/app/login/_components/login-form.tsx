@@ -13,7 +13,7 @@ const LABEL_CLASS = "text-sm font-medium text-zinc-700 dark:text-zinc-300";
 const BUTTON_CLASS =
   "flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-4 py-4 text-base font-bold text-white shadow-lg shadow-teal-700/20 transition-all hover:bg-teal-800 active:scale-[0.99] active:bg-teal-900 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600";
 
-const RESEND_COOLDOWN_SECONDS = 30;
+const RESEND_COOLDOWN_SECONDS = 60;
 
 type Step = "email" | "code";
 
@@ -49,7 +49,15 @@ export default function LoginForm() {
     setIsSubmitting(false);
 
     if (error) {
-      setErrorMessage("コードの送信に失敗しました。メールアドレスをご確認の上、もう一度お試しください。");
+      const isRateLimited =
+        error.status === 429 ||
+        error.code === "over_email_send_rate_limit" ||
+        error.code === "over_request_rate_limit";
+      setErrorMessage(
+        isRateLimited
+          ? "短い時間に送信が続いたため、いまは送れません。1分ほど待ってから、もう一度お試しください。"
+          : "コードの送信に失敗しました。メールアドレスをご確認の上、もう一度お試しください。",
+      );
       return;
     }
 
