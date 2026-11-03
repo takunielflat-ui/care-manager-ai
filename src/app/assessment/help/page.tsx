@@ -45,7 +45,7 @@ export default function AssessmentHelpPage() {
         <ol className="flex flex-col gap-3">
           <StepCard step={1} title="はじめてのログイン">
             <li>購入時のメールアドレスを入力して「コードを送信」を押します。</li>
-            <li>届いたメールの6桁のコードを入力します。</li>
+            <li>届いたメールに書かれている数字のコードを入力します。</li>
             <li>メールが届かないときは、迷惑メールフォルダも見てください。再送信は60秒たつとできます。</li>
           </StepCard>
 
