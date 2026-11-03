@@ -17,6 +17,7 @@ type MenuLink = { href: string; label: string; feature?: Feature };
 const LINKS: MenuLink[] = [
   { href: "/", label: "訪問記録の入力（トップ）", feature: "fifth_sheet" },
   { href: "/assessment", label: "アセスメント", feature: "assessment" },
+  { href: "/assessment/help", label: "アセスメントの使い方", feature: "assessment" },
   { href: "/records", label: "記録一覧", feature: "fifth_sheet" },
   { href: "/tools/tanni", label: "単位数電卓" },
   { href: "/settings", label: "辞書設定", feature: "fifth_sheet" },
