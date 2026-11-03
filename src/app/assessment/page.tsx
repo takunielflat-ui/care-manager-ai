@@ -40,6 +40,14 @@ export default async function AssessmentListPage() {
         >
           ＋ 新しく作る
         </Link>
+        <p className="mt-3">
+          <Link
+            href="/assessment/help"
+            className="inline-flex min-h-11 items-center text-base font-bold text-teal-700 underline underline-offset-2 dark:text-teal-400"
+          >
+            使い方を見る
+          </Link>
+        </p>
       </AppHeader>
 
       <main className="mx-auto w-full max-w-xl flex-1 px-4 py-6">

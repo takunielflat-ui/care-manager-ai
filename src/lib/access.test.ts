@@ -168,6 +168,7 @@ test("ヘッダーを読む側：想定外の値は無視する", () => {
 test("画面ごとに必要な機能", () => {
   assert.equal(requiredFeature("/assessment"), "assessment");
   assert.equal(requiredFeature("/assessment/new"), "assessment");
+  assert.equal(requiredFeature("/assessment/help"), "assessment");
   assert.equal(requiredFeature("/assessment/2f4a875c-d96d-4018-9e17-2abb2c66df24"), "assessment");
   for (const p of ["/", "/records", "/settings", "/help", "/assessments-old"]) assert.equal(requiredFeature(p), "fifth_sheet", p);
   assert.equal(requiredFeature(NO_ACCESS_PATH), null);
