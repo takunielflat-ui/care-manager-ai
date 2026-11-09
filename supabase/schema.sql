@@ -229,8 +229,9 @@ on conflict (email) do nothing;
 -- 選択式アセスメント（/assessment）の保存。AIは使わない。
 -- 文章（generated_text）は保存時点のものを残す。テンプレートの文言をあとで直しても
 -- 保存済みの文章は変わらない。selections / family は開き直して編集するために残す。
--- アセスメントも運営指導の対象になりうる記録のため、削除は deleted_at を立てる論理削除のみ。
--- 物理削除のポリシーは作らない（アプリからは本当に消せない）。
+-- アプリからの削除は deleted_at を立てる論理削除のみ。物理削除のポリシーは作らない（アプリからは本当に消せない）。
+-- 更新時に前回の内容へ付け足せるよう、自動では消さない。
+-- 利用者が削除した行だけ、削除から30日たったらこのファイル末尾の定期ジョブ（pg_cron）が本当に消す。
 -- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
 
 create table public.assessments (
@@ -354,3 +355,20 @@ on conflict (user_id, feature) do nothing;
 -- select a.email, to_jsonb(a) ->> 'plan' as plan, a.expires_at, a.note
 -- from public.allowed_emails a
 -- where not exists (select 1 from auth.users u where lower(u.email) = lower(a.email));
+
+-- care-manager-ai: 利用者が削除したアセスメントの完全消去
+-- 毎日 3:00（日本時間）に、削除操作（deleted_at）から30日たった行を本当に消す。削除していない行は消さない。
+-- プライバシーポリシーの「削除されたものは、約30日後に完全に消去します」の約束は、このジョブで守っている。
+-- 既に他のテーブルを作成済みの場合は、この部分だけを追加実行すればよい。
+
+create extension if not exists pg_cron with schema pg_catalog;
+grant usage on schema cron to postgres;
+grant all privileges on all tables in schema cron to postgres;
+
+select cron.schedule(
+  'purge-deleted-assessments',
+  '0 18 * * *', -- UTC の 18:00 = 日本時間の 3:00
+  $$delete from public.assessments where deleted_at < now() - interval '30 days'$$
+);
+
+select jobname, schedule, active from cron.job where jobname = 'purge-deleted-assessments';

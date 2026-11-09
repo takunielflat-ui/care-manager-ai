@@ -5,8 +5,8 @@ import { getFeatures, redirectFor, setTrustedHeaders, type Feature } from "@/lib
 
 const PUBLIC_PATHS = ["/login"];
 
-/** ログイン不要で公開するツール群。配下のパスもまとめて対象外にする。 */
-const PUBLIC_PATH_PREFIXES = ["/tools/tanni"];
+/** ログイン不要で公開するページ（無料ツール・紹介ページ・法的ページ）。配下のパスもまとめて対象外にする。 */
+const PUBLIC_PATH_PREFIXES = ["/tools/tanni", "/lp", "/legal"];
 const isPublicPrefixPath = (pathname: string) =>
   PUBLIC_PATH_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
 
@@ -20,7 +20,7 @@ const isPublicPrefixPath = (pathname: string) =>
  * 外から同じ名前のヘッダーが送られてきても、必ず消してから上書きする（setTrustedHeaders）。
  */
 export async function proxy(request: NextRequest) {
-  // 無料公開ツール（SNS・検索流入の入口）。認証を確認せず、
+  // 公開ページ（SNS・検索流入の入口）。認証を確認せず、
   // Supabaseへの往復も省いて高速に返す。偽のヘッダーだけは消しておく。
   if (isPublicPrefixPath(request.nextUrl.pathname)) {
     const headers = setTrustedHeaders(new Headers(request.headers), { features: null, email: null });
@@ -54,7 +54,9 @@ export async function proxy(request: NextRequest) {
   const isPublicPath = PUBLIC_PATHS.includes(request.nextUrl.pathname);
 
   if (!user && !isPublicPath) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    // サイトの入口（トップ）に来た未ログインの人には紹介ページを見せる
+    const to = request.nextUrl.pathname === "/" ? "/lp/assessment" : "/login";
+    return NextResponse.redirect(new URL(to, request.url));
   }
 
   if (user && isPublicPath) {
