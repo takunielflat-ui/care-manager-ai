@@ -14,20 +14,23 @@
  *          ここを混ぜている簡易計算ツールが多い。
  *
  *   3. 限度額オーバー分は全額自己負担（10割）。
- *        費用 = 超過単位 × 単価
+ *        超過単位をどのサービスから出すかはケアマネが選ぶ（超過割当）。
+ *        超過単位にかかる処遇改善加算も、同じく10割負担側に入れる。
+ *        費用 = floor((超過単位 + その処遇改善) × そのサービスの単価)
  *
- *   4. 限度額内の分は保険が効く。
- *        費用額 = floor(単位 × 地域単価)
+ *   4. 限度額内の分は保険が効く。端数処理はサービスごとに行う。
+ *        単価     = 地域区分 × そのサービスの人件費割合
+ *        費用額   = floor(単位 × 単価)
  *        保険給付 = floor(費用額 × (1 − 負担割合))
  *        自己負担 = 費用額 − 保険給付
  *
  *   5. 自費項目（食費・おむつ代など）は単位数と無関係にそのまま加算。
  *
- *  ★数値・ロジックは tanni-simulator/src/calc.js から一切変更していません。
- *    型定義のみを追加しています(tanni-simulator/CLAUDE.md の指示)。
+ *  ★2026-11: 平均単価でまとめて円換算する方式をやめ、サービスごとに
+ *    円換算・端数処理してから合計する方式に変更（料金めやすPDF 改善依頼）。
  * ===================================================================== */
 
-import { 限度額, 地域区分, サービス, type 要介護度 } from "./master.ts";
+import { 限度額, 地域区分, サービス, 旧区分の読み替え, type 要介護度 } from "./master.ts";
 
 export interface 自費項目 {
   name: string;
@@ -53,6 +56,8 @@ export interface 計算入力 {
   地域区分: string;
   負担割合?: number;
   高額上限?: number | null;
+  /** 限度額を超えたとき、超過単位を先に割り当てる行の id。未指定なら一番下の行から */
+  超過割当?: number | null;
   rows: 計算行[];
 }
 
@@ -73,6 +78,17 @@ export interface 明細行 {
   自費: number;
   限度額対象: boolean;
   verified: string;
+  /** この行に割り当てた限度額超過単位（10割負担） */
+  超過単位: number;
+  /** 超過単位にかかる処遇改善加算（10割負担） */
+  超過処遇改善単位: number;
+  /** 保険が効く部分の費用額（円・切り捨て済み） */
+  費用額: number;
+  保険給付: number;
+  /** 保険が効く部分の自己負担（費用額 − 保険給付） */
+  自己負担: number;
+  /** 超過分の費用（円・全額自己負担） */
+  超過費用: number;
 }
 
 export interface 計算結果 {
@@ -86,7 +102,10 @@ export interface 計算結果 {
   超過単位: number;
   残単位: number;
   使用率: number;
+  /** 参考値（限度額対象サービスの加重平均単価）。計算には使っていない */
   平均単価: number;
+  /** 超過単位を割り当てた行（超過がなければ空） */
+  超過割当先: { id: number; label: string; 単位: number }[];
   保険対象費用: number;
   対象外費用: number;
   費用総額: number;
@@ -150,7 +169,7 @@ export function 単位数を取得(row: 計算行, 要介護度: 要介護度): 
   if (!lv1) return 0;
 
   const k2 = row.軸2;
-  const cell = k2 != null ? lv1[k2] : (lv1 as unknown as number);
+  const cell = k2 != null ? (lv1[k2] ?? lv1[旧区分の読み替え[k2]]) : (lv1 as unknown as number);
   if (cell == null) return 0;
 
   // flatUnits は数値が直接入っている
@@ -176,11 +195,7 @@ export function 計算(input: 計算入力): 計算結果 {
   const 限度 = 限度額[度] ?? 0;
 
   const details: 明細行[] = [];
-  let 給付管理単位 = 0; // 限度額の対象になる単位
-  let 対象外単位費用 = 0; // 限度額対象外サービスの費用（円）
-  let 対象外自己負担 = 0;
   let 自費合計 = 0;
-  let 処遇改善単位_対象 = 0; // 限度額対象サービスに乗る処遇改善（限度管理の外）
 
   for (const row of input.rows) {
     const def = サービス[row.service];
@@ -210,16 +225,6 @@ export function 計算(input: 計算入力): 計算結果 {
     }
     自費合計 += 行自費;
 
-    if (def.gendogaku) {
-      給付管理単位 += 小計単位;
-      処遇改善単位_対象 += 処遇改善単位;
-    } else {
-      const 費用 = Math.floor((小計単位 + 処遇改善単位) * 単価);
-      const 給付 = Math.floor(費用 * (1 - 割合));
-      対象外単位費用 += 費用;
-      対象外自己負担 += 費用 - 給付;
-    }
-
     details.push({
       id: row.id,
       service: row.service,
@@ -237,30 +242,73 @@ export function 計算(input: 計算入力): 計算結果 {
       自費: 行自費,
       限度額対象: !!def.gendogaku,
       verified: def.verified,
+      超過単位: 0,
+      超過処遇改善単位: 0,
+      費用額: 0,
+      保険給付: 0,
+      自己負担: 0,
+      超過費用: 0,
     });
   }
 
   /* ---- 限度額の判定 ---- */
+  const 対象行 = details.filter((d) => d.限度額対象);
+  const 給付管理単位 = 対象行.reduce((a, d) => a + d.小計単位, 0);
+  const 処遇改善単位_対象 = 対象行.reduce((a, d) => a + d.処遇改善単位, 0);
   const 限度内単位 = Math.min(給付管理単位, 限度);
   const 超過単位 = Math.max(0, 給付管理単位 - 限度);
   const 残単位 = Math.max(0, 限度 - 給付管理単位);
   const 使用率 = 限度 > 0 ? 給付管理単位 / 限度 : 0;
 
-  /* ---- 費用の計算 ----
-     複数サービスで単価が違うため、限度額対象分は「加重平均単価」で概算する。
-     （実際の給付管理でも超過分をどのサービスに割り当てるかは事業所次第のため、
-       ここは概算と割り切るのが実務的） */
-  let 加重合計 = 0;
-  for (const d of details) {
-    if (d.限度額対象) 加重合計 += d.小計単位 * d.単価;
+  /* ---- 超過単位をサービスに割り当てる ----
+     指定された行から先に取り、足りなければ一番下の行から順に取る。 */
+  if (超過単位 > 0) {
+    const 順 = [...対象行].reverse();
+    const 指定 = 順.findIndex((d) => d.id === input.超過割当);
+    if (指定 > 0) 順.unshift(...順.splice(指定, 1));
+    let 残り = 超過単位;
+    for (const d of 順) {
+      if (残り <= 0) break;
+      const 取る = Math.min(残り, d.小計単位);
+      d.超過単位 = 取る;
+      残り -= 取る;
+    }
   }
-  const 平均単価 = 給付管理単位 > 0 ? 加重合計 / 給付管理単位 : 10.0;
 
-  // 処遇改善加算も同じ平均単価で円換算（限度額の外なので全額が保険対象）
-  const 保険対象費用 = Math.floor((限度内単位 + 処遇改善単位_対象) * 平均単価);
-  const 保険給付 = Math.floor(保険対象費用 * (1 - 割合));
+  /* ---- 費用の計算 ----
+     サービスごとに「そのサービスの単価」で円にし、端数もサービスごとに処理してから合計する。
+     超過単位とそれにかかる処遇改善加算は10割負担側に入れる。 */
+  let 保険対象費用 = 0;
+  let 保険給付 = 0;
+  let 対象外費用 = 0;
+  let 対象外給付 = 0;
+  let 超過自己負担 = 0;
+  for (const d of details) {
+    d.超過処遇改善単位 =
+      d.超過単位 > 0 ? Math.min(d.処遇改善単位, Math.round(d.超過単位 * (d.処遇改善率 / 100))) : 0;
+    const 保険単位 = d.小計単位 - d.超過単位 + d.処遇改善単位 - d.超過処遇改善単位;
+    d.費用額 = Math.floor(保険単位 * d.単価);
+    d.保険給付 = Math.floor(d.費用額 * (1 - 割合));
+    d.自己負担 = d.費用額 - d.保険給付;
+    d.超過費用 = Math.floor((d.超過単位 + d.超過処遇改善単位) * d.単価);
+    超過自己負担 += d.超過費用;
+    if (d.限度額対象) {
+      保険対象費用 += d.費用額;
+      保険給付 += d.保険給付;
+    } else {
+      対象外費用 += d.費用額;
+      対象外給付 += d.保険給付;
+    }
+  }
   const 保険内自己負担 = 保険対象費用 - 保険給付;
-  const 超過自己負担 = Math.floor(超過単位 * 平均単価); // 全額自己負担
+  const 対象外自己負担 = 対象外費用 - 対象外給付;
+
+  // 参考表示用の加重平均単価（費用の計算には使わない）
+  const 加重合計 = 対象行.reduce((a, d) => a + d.小計単位 * d.単価, 0);
+  const 平均単価 = 給付管理単位 > 0 ? 加重合計 / 給付管理単位 : 10.0;
+  const 超過割当先 = details
+    .filter((d) => d.超過単位 > 0)
+    .map((d) => ({ id: d.id, label: d.label.replace(/（.*/, ""), 単位: d.超過単位 }));
 
   const 介護保険分自己負担 = 保険内自己負担 + 対象外自己負担;
   const 高額上限 = input.高額上限;
@@ -285,9 +333,10 @@ export function 計算(input: 計算入力): 計算結果 {
     残単位,
     使用率,
     平均単価,
+    超過割当先,
     保険対象費用,
-    対象外費用: 対象外単位費用,
-    費用総額: 保険対象費用 + 対象外単位費用 + 超過自己負担,
+    対象外費用,
+    費用総額: 保険対象費用 + 対象外費用 + 超過自己負担,
     保険給付,
     保険内自己負担,
     対象外自己負担,
@@ -340,7 +389,9 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
       total:
         r.超過単位 > 0
           ? `${r.超過単位.toLocaleString()}単位ぶん オーバー`
-          : `残り ${r.残単位.toLocaleString()}単位（まだ余裕があります）`,
+          : r.使用率 >= 0.9
+            ? `残り ${r.残単位.toLocaleString()}単位（残りわずかです。加算などで超える可能性があります）`
+            : `残り ${r.残単位.toLocaleString()}単位（まだ余裕があります）`,
       alert: r.超過単位 > 0,
     });
   } else if (r.対象外費用 > 0) {
@@ -371,28 +422,26 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
           expr: `${d.小計単位.toLocaleString()}単位 × ${d.処遇改善率}％`,
           val: `＋${d.処遇改善単位.toLocaleString()}単位`,
         })),
-      total: `合計 ${(r.限度内単位 + r.処遇改善単位).toLocaleString()}単位`,
+      total: `処遇改善分を含めた合計 ${(r.給付管理単位 + r.処遇改善単位).toLocaleString()}単位`,
     });
   }
 
-  /* 4. 単位 → 円 */
-  const 端数 = Math.abs(r.平均単価 - Math.round(r.平均単価 * 100) / 100) > 0.0001;
+  /* 4. 単位 → 円（サービスごとに1行） */
+  const 円の行 = r.details
+    .filter((d) => d.費用額 > 0)
+    .map((d) => ({
+      name: d.label.replace(/（.*/, ""),
+      expr: `${(d.小計単位 - d.超過単位 + d.処遇改善単位 - d.超過処遇改善単位).toLocaleString()}単位 × ${d.単価.toFixed(2)}円`,
+      val: 円(d.費用額),
+    }));
   steps.push({
     no: steps.length + 1,
     title: "「単位」を「円」になおします",
-    lead: `1単位あたりの金額は、お住まいの地域とサービスの種類で決まります（今回は1単位＝約${r.平均単価.toFixed(2)}円）。`,
-    lines: [
-      {
-        name: "サービスの値段（全額）",
-        expr: `${(r.限度内単位 + r.処遇改善単位).toLocaleString()}単位 × ${r.平均単価.toFixed(2)}円`,
-        val: 円(r.保険対象費用),
-      },
-      ...(r.対象外費用 > 0
-        ? [{ name: "上限のわく外のサービス", expr: "施設のご利用分など", val: 円(r.対象外費用) }]
-        : []),
-    ],
+    lead:
+      "1単位あたりの金額は、お住まいの地域とサービスの種類で決まります。サービスごとに円になおし、1円未満は切り捨てます。" +
+      (r.超過単位 > 0 ? "上限を超えた分は、あとの手順で別に計算します。" : ""),
+    lines: 円の行,
     total: `サービスの値段 ${円(r.保険対象費用 + r.対象外費用)}`,
-    note: 端数 ? "サービスごとに1単位の金額が違うため、平均でおおよそを出しています。" : null,
   });
 
   /* 5. 負担割合 */
@@ -416,14 +465,19 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
     steps.push({
       no: steps.length + 1,
       title: "上限を超えた分は全額のご負担になります",
-      lead: "上限を超えて使った分には介護保険が使えないため、10割のお支払いになります。",
-      lines: [
-        {
-          name: "オーバーした分",
-          expr: `${r.超過単位.toLocaleString()}単位 × ${r.平均単価.toFixed(2)}円`,
-          val: 円(r.超過自己負担),
-        },
-      ],
+      lead:
+        `上限を超えて使った分（と、その分の処遇改善分）には介護保険が使えないため、10割のお支払いになります。` +
+        `今回は「${r.超過割当先.map((x) => x.label).join("」「")}」のご利用分から超えた分として計算しています。`,
+      lines: r.details
+        .filter((d) => d.超過単位 > 0)
+        .map((d) => ({
+          name: d.label.replace(/（.*/, ""),
+          expr:
+            `${d.超過単位.toLocaleString()}単位` +
+            (d.超過処遇改善単位 > 0 ? `＋処遇改善${d.超過処遇改善単位.toLocaleString()}単位` : "") +
+            ` × ${d.単価.toFixed(2)}円`,
+          val: 円(d.超過費用),
+        })),
       total: `全額ご負担 ${円(r.超過自己負担)}`,
       alert: true,
     });
@@ -434,7 +488,7 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
     const lines: 計算ステップ行[] = [];
     for (const d of r.details) {
       if (!d.自費) continue;
-      lines.push({ name: d.label.replace(/（.*/, ""), expr: "食費・日用品など", val: 円(d.自費) });
+      lines.push({ name: d.label.replace(/（.*/, ""), expr: 保険外の項目名(d.service), val: 円(d.自費) });
     }
     steps.push({
       no: steps.length + 1,
@@ -446,6 +500,11 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
   }
 
   return { steps, 合計: r.月額合計 };
+}
+
+/** 保険外費用の項目名。短期入所は滞在費があるので明記する */
+export function 保険外の項目名(serviceKey: string): string {
+  return serviceKey.startsWith("短期入所") ? "食費・滞在費・日用品など" : "食費・日用品など";
 }
 
 /** 「あと何回入れられるか」を出す（限度額のこり ÷ そのサービスの1回単位） */

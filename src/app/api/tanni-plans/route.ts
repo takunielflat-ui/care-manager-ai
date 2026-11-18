@@ -59,9 +59,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "保存する内容が不正です。" }, { status: 400 });
   }
 
+  // 利用者の実名（PDF用の印刷名）はサーバーに残さない。古い画面から送られてきても捨てる
+  const { 印刷名: _除外, ...state } = body.state;
+  void _除外;
+
   const { data, error } = await supabase
     .from("tanni_plans")
-    .insert({ user_id: user.id, title, state: body.state })
+    .insert({ user_id: user.id, title, state })
     .select("id, title, updated_at")
     .single();
 
