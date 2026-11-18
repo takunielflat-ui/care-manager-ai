@@ -33,6 +33,10 @@ export interface 行state {
   加算率上書き: string;
   /** 入浴介助加算など、回数ごとの加算の選択（例: { 入浴: "Ⅰ" }）。古い保存データには無い */
   加算選択?: Record<string, string | null>;
+  /** 加算ごとの回数（月あたり）。未指定なら利用回数と同じ */
+  加算回数?: Record<string, number>;
+  /** 加算ごとの週あたり回数（「週」入力のときの表示用） */
+  加算週回数?: Record<string, number>;
   自費: 自費項目[];
 }
 
@@ -205,6 +209,18 @@ export interface 行プリセット {
   加算選択?: Record<string, string | null>;
   自費?: 自費項目[];
   jigyoshoId?: string | null;
+}
+
+/**
+ * 計算に渡す加算の回数（月あたり）。「週」入力の行は週の回数から月に直す
+ * （行の月回数も同じ式で週から求めているので、切り替えても食い違わない）。
+ */
+export function 加算回数を求める(row: 行state): Record<string, number> {
+  const out: Record<string, number> = { ...(row.加算回数 ?? {}) };
+  if (row.mode === "週") {
+    for (const [k, v] of Object.entries(row.加算週回数 ?? {})) out[k] = 週回数から月回数(v);
+  }
+  return out;
 }
 
 export function newRow(seq: number, jigyoshoList: 事業所[], preset: 行プリセット = {}): 行state {

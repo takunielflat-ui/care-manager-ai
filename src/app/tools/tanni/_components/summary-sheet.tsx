@@ -51,7 +51,7 @@ export default function SummarySheet({
     L.push("");
     for (const x of r.details) {
       L.push(
-        `・${x.label}${x.軸2 ? "（" + x.軸2 + "）" : ""}${x.加算内訳.map((k) => "＋" + k.label + "（" + k.区分 + "）").join("")}${x.包括 ? "" : " 月" + x.回数 + "回"}`,
+        `・${x.label}${x.軸2 ? "（" + x.軸2 + "）" : ""}${x.加算内訳.filter((k) => k.回数 > 0).map((k) => "＋" + k.label + "（" + k.区分 + (k.回数 !== x.回数 ? "・月" + k.回数 + "回" : "") + "）").join("")}${x.包括 ? "" : " 月" + x.回数 + "回"}`,
       );
     }
     L.push("");
@@ -186,7 +186,7 @@ export default function SummarySheet({
                             {x.icon} {x.label}
                           </div>
                           <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {[x.軸1 !== "_" ? x.軸1 : null, x.軸2, ...x.加算内訳.map((k) => `${k.label}（${k.区分}）`)].filter(Boolean).join(" / ")}
+                            {[x.軸1 !== "_" ? x.軸1 : null, x.軸2, ...x.加算内訳.filter((k) => k.回数 > 0).map((k) => `${k.label}（${k.区分}${k.回数 !== x.回数 ? `・月${k.回数}回` : ""}）`)].filter(Boolean).join(" / ")}
                             {x.包括 ? "（月額包括）" : ` × ${x.回数}回`}
                           </div>
                         </td>
