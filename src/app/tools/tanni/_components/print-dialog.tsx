@@ -235,7 +235,7 @@ export default function PrintDialog({
                         <tr key={d.id}>
                           <td className="border border-zinc-300 p-[1.4mm_2mm] align-top">{d.label.replace(/（.*/, "")}</td>
                           <td className="border border-zinc-300 p-[1.4mm_2mm] align-top text-[9pt] text-zinc-600">
-                            {[d.軸1 !== "_" ? d.軸1 : null, d.軸2].filter(Boolean).join("／") || "―"}
+                            {[d.軸1 !== "_" ? d.軸1 : null, d.軸2, ...d.加算内訳.map((k) => `${k.label}（${k.区分}）`)].filter(Boolean).join("／") || "―"}
                           </td>
                           <td className="border border-zinc-300 p-[1.4mm_2mm] text-right align-top whitespace-nowrap">
                             {d.包括 ? "月ぎめ" : `月 ${d.回数} ${サービス[d.service]?.freq === "per_day" ? "日" : "回"}`}

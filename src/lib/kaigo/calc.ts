@@ -5,7 +5,8 @@
  *
  *  ■計算の考え方（ここが実務上いちばん間違えやすい所）
  *
- *   1. 給付管理単位 = Σ(基本単位 × 月回数)
+ *   1. 給付管理単位 = Σ((基本単位 + 回数ごとの加算) × 月回数)
+ *        回数ごとの加算 = 入浴介助加算など（要介護のみ）。限度額の対象に含める。
  *        → 区分支給限度基準額と比べるのはこの数字。
  *
  *   2. 処遇改善加算 = 給付管理単位 × 加算率
@@ -48,6 +49,8 @@ export interface 計算行 {
   月回数?: number;
   処遇改善区分?: string | null;
   加算率上書き?: number | string | null;
+  /** 回数ごとの加算の選択（加算key → 区分名。例: { 入浴: "Ⅰ" }） */
+  加算選択?: Record<string, string | null> | null;
   自費?: 自費項目[];
 }
 
@@ -69,6 +72,9 @@ export interface 明細行 {
   軸1?: string | null;
   軸2?: string | null;
   基本単位: number;
+  /** 1回（1日）あたりの加算単位の合計（入浴介助加算など） */
+  加算単位: number;
+  加算内訳: { label: string; 区分: string; 単位: number }[];
   回数: number;
   包括: boolean;
   小計単位: number;
@@ -177,6 +183,23 @@ export function 単位数を取得(row: 計算行, 要介護度: 要介護度): 
   return cell[要介護度] ?? 0;
 }
 
+/**
+ * 1サービス行の「回数ごとの加算」（入浴介助加算など）を引く。
+ * 要介護の方の、回数で数えるサービスだけが対象（要支援・月額包括・手入力は対象外）。
+ */
+export function 回数加算を取得(row: 計算行, 要介護度: 要介護度): { label: string; 区分: string; 単位: number }[] {
+  const def = サービス[row.service];
+  if (!def?.kasan || !row.加算選択) return [];
+  if (要介護度.startsWith("要支援") || は月額包括(row, 要介護度)) return [];
+  if (row.manualUnits != null && row.manualUnits !== "") return [];
+  const out: { label: string; 区分: string; 単位: number }[] = [];
+  for (const k of def.kasan) {
+    const 区分 = row.加算選択[k.key];
+    if (区分 && k.options[区分] != null) out.push({ label: k.label, 区分, 単位: k.options[区分] });
+  }
+  return out;
+}
+
 /** 要支援で月額包括になるサービスか */
 export function は月額包括(row: 計算行, 要介護度: 要介護度): boolean {
   const def = サービス[row.service];
@@ -205,7 +228,9 @@ export function 計算(input: 計算入力): 計算結果 {
     const 基本単位 = 単位数を取得(row, 度);
     const 包括 = は月額包括(row, 度);
     const 回数 = 包括 ? 1 : Number(row.月回数) || 0;
-    const 小計単位 = 基本単位 * 回数;
+    const 加算内訳 = 回数加算を取得(row, 度);
+    const 加算単位 = 加算内訳.reduce((a, k) => a + k.単位, 0);
+    const 小計単位 = (基本単位 + 加算単位) * 回数;
 
     // 処遇改善加算率
     let 率 = 0;
@@ -233,6 +258,8 @@ export function 計算(input: 計算入力): 計算結果 {
       軸1: row.軸1,
       軸2: row.軸2,
       基本単位,
+      加算単位,
+      加算内訳,
       回数,
       包括,
       小計単位,
@@ -360,6 +387,11 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
   const 割 = Math.round(負担割合 * 10);
   const steps: 計算ステップ項目[] = [];
   const 回の語 = (d: 明細行) => (サービス[d.service]?.freq === "per_day" ? "日" : "回");
+  // 加算があれば「(777＋入浴40)単位」のように内訳を見せる
+  const 単位の式 = (d: 明細行) =>
+    d.加算単位 > 0
+      ? `(${d.基本単位.toLocaleString()}＋${d.加算内訳.map((k) => k.label.replace(/介助加算$/, "") + k.単位).join("＋")})単位`
+      : `${d.基本単位.toLocaleString()}単位`;
 
   if (r.給付管理単位 > 0) {
     /* 1. サービスごとの単位数 */
@@ -371,7 +403,7 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
         .filter((d) => d.限度額対象)
         .map((d) => ({
           name: d.label.replace(/（.*/, ""),
-          expr: d.包括 ? "1か月ぶん" : `${d.基本単位.toLocaleString()}単位 × ${d.回数}${回の語(d)}`,
+          expr: d.包括 ? "1か月ぶん" : `${単位の式(d)} × ${d.回数}${回の語(d)}`,
           val: `${d.小計単位.toLocaleString()}単位`,
         })),
       total: `合計 ${r.給付管理単位.toLocaleString()}単位`,
@@ -402,7 +434,7 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
       lead: "このサービスは「区分支給限度基準額（使える上限）」のわくの外にあるため、上限とのくらべ合わせはありません。",
       lines: r.details.map((d) => ({
         name: d.label.replace(/（.*/, ""),
-        expr: d.包括 ? "1か月ぶん" : `${d.基本単位.toLocaleString()}単位 × ${d.回数}${回の語(d)}`,
+        expr: d.包括 ? "1か月ぶん" : `${単位の式(d)} × ${d.回数}${回の語(d)}`,
         val: `${(d.小計単位 + d.処遇改善単位).toLocaleString()}単位`,
       })),
       total: `サービスの値段 ${円(r.対象外費用)}`,

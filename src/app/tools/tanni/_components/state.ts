@@ -31,6 +31,8 @@ export interface 行state {
   manualUnits: string;
   処遇改善区分: string | null;
   加算率上書き: string;
+  /** 入浴介助加算など、回数ごとの加算の選択（例: { 入浴: "Ⅰ" }）。古い保存データには無い */
+  加算選択?: Record<string, string | null>;
   自費: 自費項目[];
 }
 
@@ -42,6 +44,7 @@ export interface 事業所 {
   軸2?: string | null;
   処遇改善区分?: string | null;
   加算率上書き?: string;
+  加算選択?: Record<string, string | null>;
   manualUnits?: string;
   自費?: 自費項目[];
   _open?: boolean;
@@ -199,6 +202,7 @@ export interface 行プリセット {
   manualUnits?: string;
   処遇改善区分?: string | null;
   加算率上書き?: string;
+  加算選択?: Record<string, string | null>;
   自費?: 自費項目[];
   jigyoshoId?: string | null;
 }
@@ -223,6 +227,7 @@ export function newRow(seq: number, jigyoshoList: 事業所[], preset: 行プリ
     manualUnits: preset.manualUnits ?? "",
     処遇改善区分: preset.処遇改善区分 ?? (def.shogu && Object.keys(def.shogu)[0]) ?? null,
     加算率上書き: preset.加算率上書き ?? "",
+    加算選択: preset.加算選択 ? { ...preset.加算選択 } : {},
     自費: preset.自費 ? JSON.parse(JSON.stringify(preset.自費)) : [],
   };
   // 同じサービスの事業所が登録済みなら自動で当てる（訪問先での操作を減らす）

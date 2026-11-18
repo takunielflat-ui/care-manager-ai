@@ -7,7 +7,7 @@ import {
   type 要介護度,
   type 負担限度額段階,
 } from "@/lib/kaigo/master";
-import { 単位数を取得, は月額包括, 週回数から月回数, type 自費項目 } from "@/lib/kaigo/calc";
+import { 単位数を取得, 回数加算を取得, は月額包括, 週回数から月回数, type 自費項目 } from "@/lib/kaigo/calc";
 import { axisInfo, keys2Of, 度が使えるか, type 事業所, type 行state } from "./state";
 
 const badgeCls: Record<string, string> = {
@@ -50,8 +50,12 @@ export default function ServiceRow({
   const verifiedStatus = 予防 && def.verifiedYobo ? def.verifiedYobo : def.verified;
   const badge = 検証ラベル[verifiedStatus];
 
-  const u = 単位数を取得(row, 度);
+  const 基本u = 単位数を取得(row, 度);
+  const 加算u = 回数加算を取得(row, 度).reduce((a, k) => a + k.単位, 0);
+  const u = 基本u + 加算u;
   const n = 包括 ? 1 : Number(row.月回数) || 0;
+  // 入浴介助加算などは要介護の方・回数で数えるサービスだけ選べる
+  const 回数加算 = !予防 && !包括 && !def.manualOnly ? def.kasan ?? [] : [];
   const shoguRate =
     row.加算率上書き !== "" ? Number(row.加算率上書き) : row.処遇改善区分 && def.shogu ? def.shogu[row.処遇改善区分] || 0 : 0;
   const 処遇改善単位 = Math.round(u * n * (shoguRate / 100));
@@ -70,6 +74,7 @@ export default function ServiceRow({
       軸1,
       軸2,
       処遇改善区分: (d2.shogu && Object.keys(d2.shogu)[0]) ?? null,
+      加算選択: {},
       jigyoshoId: null,
     });
   };
@@ -275,6 +280,28 @@ export default function ServiceRow({
         <div className="mb-3 py-1 text-xs text-zinc-500 dark:text-zinc-400">月額包括のため回数入力は不要です</div>
       )}
 
+      {/* 入浴介助加算など（回数ごとの加算） */}
+      {回数加算.map((k) => (
+        <div key={k.key} className="mb-3">
+          <label className={labelCls}>{k.label}</label>
+          <select
+            className={selectCls}
+            value={row.加算選択?.[k.key] ?? ""}
+            onChange={(e) => onChange({ 加算選択: { ...(row.加算選択 ?? {}), [k.key]: e.target.value || null } })}
+          >
+            <option value="">算定なし</option>
+            {Object.entries(k.options).map(([区分, 単位]) => (
+              <option key={区分} value={区分}>
+                {区分}（1{unitWord} {単位}単位）
+              </option>
+            ))}
+          </select>
+          {row.加算選択?.[k.key] ? (
+            <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">利用のたびに入浴する前提で、すべての{unitWord}に足しています</div>
+          ) : null}
+        </div>
+      ))}
+
       {/* 処遇改善加算 */}
       {shoguKeys.length > 0 && (
         <div className="mb-3">
@@ -347,7 +374,9 @@ export default function ServiceRow({
 
       {/* 小計 */}
       <div className="mt-2.5 border-t border-dashed border-zinc-200 pt-2.5 text-sm font-bold text-teal-700 tabular-nums dark:border-zinc-700 dark:text-teal-400">
-        {包括 ? `${u.toLocaleString()}単位（月額包括）` : `${u.toLocaleString()}単位 × ${n}回 = ${(u * n).toLocaleString()}単位`}
+        {包括
+          ? `${u.toLocaleString()}単位（月額包括）`
+          : `${加算u > 0 ? `(${基本u.toLocaleString()}＋加算${加算u})` : u.toLocaleString()}単位 × ${n}回 = ${(u * n).toLocaleString()}単位`}
         {処遇改善単位 > 0 && (
           <span className="ml-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">
             ＋処遇改善 {処遇改善単位.toLocaleString()}単位
