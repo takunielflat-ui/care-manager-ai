@@ -62,6 +62,11 @@ export interface サービス定義 {
   verifiedYobo?: 検証ステータス;
   note?: string;
   shogu: Record<string, number>;
+  /**
+   * 利用1回（1日）ごとに足す加算（入浴介助加算など）。要介護の方のみ。
+   * 区分支給限度基準額の対象で、処遇改善加算の計算にも含める。
+   */
+  kasan?: 回数加算定義[];
   axes?: string[];
   units?: 単位表;
   flatUnits?: 単位表;
@@ -70,6 +75,17 @@ export interface サービス定義 {
   manualOnly?: boolean;
   presets?: string[];
 }
+
+export interface 回数加算定義 {
+  key: string;
+  label: string;
+  /** 区分名 → 1回（1日）あたりの単位数 */
+  options: Record<string, number>;
+}
+
+/* 入浴介助加算（令和6年度改定で単位数据置。令和8年6月の期中改定でも変更なし） */
+const 入浴_デイ: 回数加算定義 = { key: "入浴", label: "入浴介助加算", options: { Ⅰ: 40, Ⅱ: 55 } };
+const 入浴_デイケア: 回数加算定義 = { key: "入浴", label: "入浴介助加算", options: { Ⅰ: 40, Ⅱ: 60 } };
 
 export const MASTER_VERSION = {
   label: "令和8年6月版",
@@ -165,6 +181,7 @@ export const サービス: Record<string, サービス定義> = {
     verified: "official",
     note: "要支援の方は総合事業（通所型サービス）となり、このマスタの対象外です。",
     shogu: { Ⅰイ: 11.1, Ⅰロ: 12.0, Ⅱイ: 10.9, Ⅱロ: 11.8, Ⅲ: 9.9, Ⅳ: 8.3 },
+    kasan: [入浴_デイ],
     axes: ["規模", "時間区分"],
     units: {
       通常規模型: {
@@ -202,6 +219,7 @@ export const サービス: Record<string, サービス定義> = {
     freq: "per_use",
     verified: "checked",
     shogu: { Ⅰイ: 11.1, Ⅰロ: 12.0, Ⅱイ: 10.9, Ⅱロ: 11.8, Ⅲ: 9.9, Ⅳ: 8.3 },
+    kasan: [入浴_デイ],
     axes: ["時間区分"],
     units: {
       _: {
@@ -225,6 +243,7 @@ export const サービス: Record<string, サービス定義> = {
     verifiedYobo: "official",
     note: "要支援1・2は月額包括（介護予防通所リハ）です。時間区分は関係ありません。",
     shogu: { Ⅰイ: 10.3, Ⅰロ: 11.1, Ⅱイ: 10.0, Ⅱロ: 10.8, Ⅲ: 8.3, Ⅳ: 7.0 },
+    kasan: [入浴_デイケア],
     axes: ["規模", "時間区分"],
     units: {
       通常規模型: {
@@ -259,6 +278,7 @@ export const サービス: Record<string, サービス定義> = {
     verified: "official",
     verifiedYobo: "official",
     shogu: { Ⅰイ: 18.1, Ⅰロ: 19.5, Ⅱイ: 17.4, Ⅱロ: 18.8, Ⅲ: 15.0, Ⅳ: 12.2 },
+    kasan: [入浴_デイ],
     axes: ["類型", "時間区分"],
     units: {
       /* 要支援は介護予防認知症対応型通所介護（同じ時間区分で単位数が別建て） */

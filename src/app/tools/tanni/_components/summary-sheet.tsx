@@ -50,7 +50,9 @@ export default function SummarySheet({
     L.push(`【介護サービス費用の概算】${r.要介護度}／負担${Math.round(負担割合 * 10)}割`);
     L.push("");
     for (const x of r.details) {
-      L.push(`・${x.label}${x.軸2 ? "（" + x.軸2 + "）" : ""}${x.包括 ? "" : " 月" + x.回数 + "回"}`);
+      L.push(
+        `・${x.label}${x.軸2 ? "（" + x.軸2 + "）" : ""}${x.加算内訳.map((k) => "＋" + k.label + "（" + k.区分 + "）").join("")}${x.包括 ? "" : " 月" + x.回数 + "回"}`,
+      );
     }
     L.push("");
     L.push(`合計単位数：${r.給付管理単位.toLocaleString()}単位（限度額 ${r.限度額.toLocaleString()}単位）`);
@@ -184,7 +186,7 @@ export default function SummarySheet({
                             {x.icon} {x.label}
                           </div>
                           <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {[x.軸1 !== "_" ? x.軸1 : null, x.軸2].filter(Boolean).join(" / ")}
+                            {[x.軸1 !== "_" ? x.軸1 : null, x.軸2, ...x.加算内訳.map((k) => `${k.label}（${k.区分}）`)].filter(Boolean).join(" / ")}
                             {x.包括 ? "（月額包括）" : ` × ${x.回数}回`}
                           </div>
                         </td>
