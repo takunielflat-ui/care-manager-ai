@@ -15,6 +15,7 @@ import {
   type サービス定義,
   type 要介護度,
   type 負担限度額段階,
+  旧区分の読み替え,
 } from "@/lib/kaigo/master";
 import { 週回数から月回数, type 自費項目 } from "@/lib/kaigo/calc";
 
@@ -57,6 +58,8 @@ export interface 条件 {
 
 export interface AppState extends 条件 {
   印刷名: string;
+  /** 限度額を超えたとき、超過単位を割り当てる行の id（null = 一番下の行から） */
+  超過割当: number | null;
   rows: 行state[];
   jigyosho: 事業所[];
   seq: number;
@@ -243,18 +246,24 @@ export function applyJigyosho(row: 行state, jigyoshoList: 事業所[], jid: str
     軸2,
     処遇改善区分: j.処遇改善区分 ?? null,
     加算率上書き: j.加算率上書き ?? "",
-    自費: JSON.parse(JSON.stringify(j.自費 || [])),
+    // 事業所に自費が登録されていなければ、入力済みの自費（保険外費用）を消さない
+    自費: j.自費 && j.自費.length ? JSON.parse(JSON.stringify(j.自費)) : row.自費,
     manualUnits: j.manualUnits || row.manualUnits,
   };
 }
 
 /** 要介護度を切り替えたとき、各行の区分を新しい度で使えるものに読み替える */
+/**
+ * 要介護度を切り替えたとき（保存した計算を読み込んだときも）、各行の区分を新しい度で使えるものに読み替える。
+ * 直すのは区分（軸2）だけ。自費（食費などの保険外費用）・回数・処遇改善区分は必ずそのまま残す。
+ */
 export function 要介護度に合わせて行を直す(rows: 行state[], 度: 要介護度): 行state[] {
   return rows.map((row) => {
     const def = サービス[row.service];
     if (!def || def.manualOnly) return row;
-    const k2 = 有効な軸2(def, row.軸1, row.軸2, 度, row.service);
-    return k2 != null ? { ...row, 軸2: k2 } : row;
+    const 元 = row.軸2 != null ? (旧区分の読み替え[row.軸2] ?? row.軸2) : row.軸2;
+    const k2 = 有効な軸2(def, row.軸1, 元, 度, row.service);
+    return k2 != null ? { ...row, 軸2: k2, 自費: row.自費 } : row;
   });
 }
 

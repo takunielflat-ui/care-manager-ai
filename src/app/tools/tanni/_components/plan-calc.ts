@@ -11,7 +11,9 @@ import { 計算, type 計算結果 } from "@/lib/kaigo/calc";
 import type { 条件, 行state } from "./state";
 
 export interface プラン内容 extends 条件 {
-  印刷名: string;
+  /** 古い保存データにだけ入っていることがある。新しい保存には含めない */
+  印刷名?: string;
+  超過割当?: number | null;
   rows: 行state[];
 }
 
@@ -25,6 +27,7 @@ export function プランを計算(state: プラン内容): 計算結果 {
     地域区分: state.地域区分,
     負担割合: state.負担割合,
     高額上限: 高額上限を引く(state.高額区分),
+    超過割当: state.超過割当 ?? null,
     rows: state.rows.map((x) => ({
       id: x.id,
       service: x.service,

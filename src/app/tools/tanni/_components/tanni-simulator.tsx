@@ -56,7 +56,7 @@ function 初期状態を作る(): AppState {
   const jigyosho = loadJigyosho();
   const seq = 1;
   const rows = [newRow(seq, jigyosho)];
-  return { ...cond, 印刷名: "", rows, jigyosho, seq: seq + 1 };
+  return { ...cond, 印刷名: "", 超過割当: null, rows, jigyosho, seq: seq + 1 };
 }
 
 const noopSubscribe = () => () => {};
@@ -112,6 +112,7 @@ export default function TanniSimulator() {
       saveCond(next);
       return next;
     });
+  const set超過割当 = (id: number | null) => setState((s) => ({ ...s, 超過割当: id }));
   const setPrintName = (v: string) => setState((s) => ({ ...s, 印刷名: v }));
   const setPrintBy = (v: string) =>
     setState((s) => {
@@ -142,8 +143,11 @@ export default function TanniSimulator() {
         高額区分: plan.高額区分,
         負担限度額段階: plan.負担限度額段階,
         印刷作成者: plan.印刷作成者,
-        印刷名: plan.印刷名,
-        rows: plan.rows,
+        // 実名はサーバーに置かないので、読み込み時は空にする（別の方の名前が残るのも防ぐ）
+        印刷名: "",
+        超過割当: plan.超過割当 ?? null,
+        // 古い区分名で保存された行も、いまの区分に読み替える（自費はそのまま残る）
+        rows: 要介護度に合わせて行を直す(plan.rows, plan.要介護度),
         seq: Math.max(s.seq, ...plan.rows.map((r) => r.id + 1)),
       };
       saveCond(next);
@@ -330,6 +334,33 @@ export default function TanniSimulator() {
             ))
           )}
 
+          {result.超過単位 > 0 && (
+            <div className="mb-3 rounded-xl border-[1.5px] border-red-300 bg-red-50 p-3.5 dark:border-red-900 dark:bg-red-950">
+              <label className={labelCls}>
+                上限を超えた分（{result.超過単位.toLocaleString()}単位）をどのサービスから出すか
+              </label>
+              <select
+                className={selectCls}
+                value={state.超過割当 ?? ""}
+                onChange={(e) => set超過割当(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">自動（一番下のサービスから）</option>
+                {result.details
+                  .filter((d) => d.限度額対象 && d.小計単位 > 0)
+                  .map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.label.replace(/（.*/, "")}
+                      {d.軸2 ? "（" + d.軸2 + "）" : ""}
+                    </option>
+                  ))}
+              </select>
+              <div className="mt-1.5 text-xs text-red-800 dark:text-red-300">
+                いま：{result.超過割当先.map((x) => x.label + " " + x.単位.toLocaleString() + "単位").join("、")}
+                。超えた単位とその処遇改善加算は全額（10割）のご負担として計算し、PDFにも明記します。
+              </div>
+            </div>
+          )}
+
           <QuickAdd 度={state.要介護度} onAdd={(key, 軸2) => addRow({ key, 軸2: 軸2 ?? undefined })} />
 
           <button
@@ -389,6 +420,7 @@ export default function TanniSimulator() {
         r={result}
         要介護度={state.要介護度}
         負担割合={state.負担割合}
+        地域区分ラベル={地域区分.find((a) => a.id === state.地域区分)?.label ?? state.地域区分}
         printName={state.印刷名}
         printBy={state.印刷作成者}
         onPrintNameChange={setPrintName}
@@ -413,7 +445,7 @@ export default function TanniSimulator() {
           高額区分: state.高額区分,
           負担限度額段階: state.負担限度額段階,
           印刷作成者: state.印刷作成者,
-          印刷名: state.印刷名,
+          超過割当: state.超過割当,
           rows: state.rows,
         }}
         onLoad={loadPlan}

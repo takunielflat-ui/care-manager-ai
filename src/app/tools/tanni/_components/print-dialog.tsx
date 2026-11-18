@@ -19,6 +19,7 @@ export default function PrintDialog({
   r,
   要介護度,
   負担割合,
+  地域区分ラベル,
   printName,
   printBy,
   onPrintNameChange,
@@ -29,6 +30,7 @@ export default function PrintDialog({
   r: 計算結果 | null;
   要介護度: 要介護度;
   負担割合: number;
+  地域区分ラベル: string;
   printName: string;
   printBy: string;
   onPrintNameChange: (v: string) => void;
@@ -46,8 +48,14 @@ export default function PrintDialog({
   const now = new Date();
   const 割 = Math.round(負担割合 * 10);
   const steps = r ? 計算ステップ(r, 負担割合).steps : [];
-  const pct = r ? Math.min(100, r.使用率 * 100) : 0;
-  const 帯色 = r?.帯 === "over" ? "bg-red-600" : r?.帯 === "caution" ? "bg-amber-500" : "bg-emerald-500";
+  // 上限を超えたら100%で止めて赤にする
+  const pct = r ? (r.超過単位 > 0 ? 100 : Math.min(100, r.使用率 * 100)) : 0;
+  // 印刷では背景色が落とされることがあるので、塗りは固定色＋print-color-adjust: exact で描く
+  const 帯色 = r?.帯 === "over" ? "#dc2626" : r?.帯 === "caution" ? "#f59e0b" : "#10b981";
+  const 短期入所あり = !!r?.details.some((d) => d.service.startsWith("短期入所") && d.自費 > 0);
+  const 単価一覧 = r
+    ? Array.from(new Map(r.details.map((d) => [d.label.replace(/（.*/, ""), d.単価])).entries())
+    : [];
 
   return (
     <dialog
@@ -64,6 +72,7 @@ export default function PrintDialog({
           .tanni-print-dialog::backdrop { display: none !important; }
           .tanni-print-body { padding: 0 !important; background: #fff !important; overflow: visible !important; }
           .tanni-print-sheet { width: auto !important; box-shadow: none !important; }
+          .tanni-print-sheet, .tanni-print-sheet * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           @page { size: A4 portrait; margin: 14mm; }
         }
       `}</style>
@@ -127,6 +136,7 @@ export default function PrintDialog({
                       {printName ? printName + "　様　／　" : ""}
                       {要介護度}　／　自己負担 {割}割
                     </div>
+                    <div className="mt-[0.5mm] text-[9pt] text-zinc-600">地域区分：{地域区分ラベル}</div>
                   </div>
                   <div className="ml-auto whitespace-nowrap text-[9pt] text-zinc-600">
                     {now.getFullYear()}年{now.getMonth() + 1}月　作成
@@ -151,7 +161,12 @@ export default function PrintDialog({
                   <div className="mb-[2mm] border-l-4 border-teal-700 pl-[2.5mm] text-[10.5pt] font-extrabold text-teal-700">お支払いの内訳</div>
                   <PrKv k="介護保険のサービス（自己負担分）" v={円(r.介護保険分自己負担)} />
                   {r.超過自己負担 ? <PrKv k="上限を超えた分（全額のご負担）" v={円(r.超過自己負担)} over /> : null}
-                  {r.自費合計 ? <PrKv k="食事代・日用品など（保険の対象外）" v={円(r.自費合計)} /> : null}
+                  {r.自費合計 ? (
+                    <PrKv
+                      k={短期入所あり ? "食費・滞在費・日用品など（保険の対象外）" : "食事代・日用品など（保険の対象外）"}
+                      v={円(r.自費合計)}
+                    />
+                  ) : null}
                   <div className="mt-[0.8mm] flex items-center justify-between border-t-2 border-zinc-800 pt-[2mm] text-[11.5pt] font-extrabold">
                     <span>合計</span>
                     <b className="text-[16pt] text-teal-700">{円(r.月額合計)}</b>
@@ -163,20 +178,42 @@ export default function PrintDialog({
                   <div className="mb-[2mm] border-l-4 border-teal-700 pl-[2.5mm] text-[10.5pt] font-extrabold text-teal-700">
                     介護保険で使える上限に対して、いまどのくらい？
                   </div>
-                  <div className="h-[7mm] overflow-hidden rounded-full border border-zinc-300 bg-zinc-100">
-                    <div className={`h-full rounded-full ${帯色}`} style={{ width: `${pct}%` }} />
+                  <div
+                    className="relative h-[7mm] overflow-hidden rounded-full border border-zinc-300"
+                    style={{ background: "#f4f4f5", WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}
+                  >
+                    {/* 背景色を落とされても見えるよう、塗りは幅を持った要素＋同色の枠線で描く */}
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${pct}%`,
+                        background: 帯色,
+                        boxShadow: `inset 0 0 0 7mm ${帯色}`,
+                        WebkitPrintColorAdjust: "exact",
+                        printColorAdjust: "exact",
+                      }}
+                    />
                   </div>
                   <div className="mt-[1.5mm] flex justify-between text-[10pt]">
                     <span>
                       {r.給付管理単位.toLocaleString()} / {r.限度額.toLocaleString()} 単位
                     </span>
                     <b className={r.帯 === "over" ? "text-red-700" : ""}>
-                      {r.超過単位 ? `${r.超過単位.toLocaleString()}単位オーバー` : `残り ${r.残単位.toLocaleString()}単位`}
+                      {r.超過単位
+                        ? `${r.超過単位.toLocaleString()}単位オーバー`
+                        : `残り ${r.残単位.toLocaleString()}単位（${Math.round(r.使用率 * 100)}％使用）`}
                     </b>
                   </div>
                   {r.超過単位 ? (
                     <div className="mt-[2.5mm] rounded-[2mm] border-[1.5px] border-red-300 bg-red-50 p-[2.5mm_3mm] text-[10pt] font-bold text-red-800">
                       上限を超えているため、{円(r.超過自己負担)} は介護保険が使えず全額のご負担になります。
+                      <div className="mt-[0.8mm] text-[9pt] font-normal">
+                        超えた分は「{r.超過割当先.map((x) => `${x.label}（${x.単位.toLocaleString()}単位）`).join("」「")}」のご利用分として計算しています（その分の処遇改善分も含みます）。
+                      </div>
+                    </div>
+                  ) : r.使用率 >= 0.9 ? (
+                    <div className="mt-[2.5mm] rounded-[2mm] border-[1.5px] border-amber-300 bg-amber-50 p-[2.5mm_3mm] text-[10pt] font-bold text-amber-800">
+                      残りわずかです（加算などで上限を超える可能性があります）。
                     </div>
                   ) : null}
                 </div>
@@ -221,7 +258,8 @@ export default function PrintDialog({
                     <div className="border-b border-dotted border-zinc-300 py-[0.6mm]">
                       <dt className="float-left clear-left w-[24mm] font-extrabold text-teal-700">単位</dt>
                       <dd className="ml-[24mm]">
-                        サービスの値段は全国共通に「単位」で決められています。1単位は地域と種類により10.00〜11.40円、今回は約{r.平均単価.toFixed(2)}円です。
+                        サービスの値段は全国共通に「単位」で決められています。1単位の金額は地域（今回は{地域区分ラベル}）とサービスの種類で決まり、今回は
+                        {単価一覧.map(([name, t]) => `${name} ${t.toFixed(2)}円`).join("／")}です。
                       </dd>
                     </div>
                     <div className="border-b border-dotted border-zinc-300 py-[0.6mm]">
@@ -244,6 +282,10 @@ export default function PrintDialog({
                 <div className="mb-[3mm] border-t border-zinc-300 pt-[2mm] text-[8.5pt] leading-[1.7] text-zinc-600">
                   <div>※ この金額はめやすです。実際のご請求は、その月の利用日数や事業所ごとの加算により前後します。</div>
                   <div>※ 正確な金額は、各事業所の重要事項説明書・料金表をご確認ください。</div>
+                  <div>※ 「介護保険負担限度額認定」を受けている方は、ショートステイなどの食費・滞在費がこの金額より下がります。</div>
+                  <div>
+                    ※ 介護保険の自己負担が高額になった月は「高額介護サービス費」の対象となり、上限を超えた分が後から払い戻されることがあります（上限を超えて全額のご負担になった分や、食費・滞在費は対象外です）。
+                  </div>
                   <div>※ ご不明な点は、担当のケアマネジャーにお気軽におたずねください。</div>
                   {printBy ? <div className="mt-[2mm] font-bold text-zinc-800">作成：{printBy}</div> : null}
                 </div>

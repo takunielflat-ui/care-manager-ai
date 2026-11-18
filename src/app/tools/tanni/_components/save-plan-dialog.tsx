@@ -5,8 +5,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { 行state, 条件 } from "./state";
 
+/**
+ * サーバーに保存する計算の中身。
+ * ★利用者の実名（印刷名）はここに入れない。PDFへの名前の差し込みは端末内だけで行い、
+ *   サーバー（運営者を含む）には一切送らない。古い保存データには入っている場合がある。
+ */
 export interface TanniPlanState extends 条件 {
-  印刷名: string;
+  印刷名?: string;
+  超過割当?: number | null;
   rows: 行state[];
 }
 
@@ -66,7 +72,8 @@ function SavePlanDialogBody({
   const [authState, setAuthState] = useState<"checking" | "in" | "out" | "error">("checking");
   const [plans, setPlans] = useState<PlanSummary[]>([]);
   const [plansLoading, setPlansLoading] = useState(false);
-  const [title, setTitle] = useState(currentState.印刷名 || "");
+  // 実名をサーバーに送らないため、PDF用のお名前を保存名の初期値に使わない
+  const [title, setTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
@@ -117,10 +124,13 @@ function SavePlanDialogBody({
     setSaving(true);
     setErrorMessage("");
     try {
+      // 印刷名（利用者の実名）は送らない
+      const { 印刷名: _除外, ...state } = currentState;
+      void _除外;
       const res = await fetch("/api/tanni-plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), state: currentState }),
+        body: JSON.stringify({ title: title.trim(), state }),
       });
       const data: { plan?: PlanSummary; error?: string } = await res.json().catch(() => ({}));
       if (!res.ok || !data.plan) {
@@ -201,12 +211,12 @@ function SavePlanDialogBody({
         <>
           <div className="mb-3 rounded-xl border border-zinc-200 bg-white p-3.5 dark:border-zinc-800 dark:bg-zinc-950">
             <label className="mb-1.5 block text-xs font-bold text-zinc-500 dark:text-zinc-400">
-              利用者名・プラン名
+              プラン名（実名は入れないでください）
             </label>
             <input
               className={inputCls}
               value={title}
-              placeholder="例）〇〇様 プランA"
+              placeholder="例）No.12 プランA／Aさん 通所追加案"
               onChange={(e) => setTitle(e.target.value)}
             />
             <button
@@ -219,6 +229,8 @@ function SavePlanDialogBody({
             </button>
             <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
               保存するたびに新しいプランとして追加されます。プランA/Bの比較にご利用ください。
+              <br />
+              プラン名はサーバーに保存されるため、利用者のお名前は入れず、事業所内の番号やイニシャルなどで区別してください。PDFに印字するお名前は保存されません（印刷のたびにこの端末で入力します）。
             </div>
           </div>
 

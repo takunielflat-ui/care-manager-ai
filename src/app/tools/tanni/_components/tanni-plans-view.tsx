@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/client";
 import { 円, type 計算結果 } from "@/lib/kaigo/calc";
+import { 地域区分 } from "@/lib/kaigo/master";
 import { プランを計算, type プラン内容 } from "./plan-calc";
 import { GaugeBar } from "./gauge";
 
@@ -17,6 +18,8 @@ const 帯色 = (r: 計算結果) =>
     : r.帯 === "caution"
       ? "text-amber-600 dark:text-amber-400"
       : "text-emerald-600 dark:text-emerald-400";
+
+const 地域区分名 = (id: string) => 地域区分.find((a) => a.id === id)?.label ?? id;
 
 function サービス名(r: 計算結果): string {
   if (r.details.length === 0) return "（サービスなし）";
@@ -368,6 +371,13 @@ function ComparePanel({ a, b }: { a: Computed; b: Computed }) {
       <div className="mt-3 rounded-lg bg-teal-50 px-3 py-2 text-[12.5px] font-bold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
         {差額文}
       </div>
+
+      {a.plan.state.地域区分 !== b.plan.state.地域区分 && (
+        <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] font-bold text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          ※ 2件で地域区分が違います（{地域区分名(a.plan.state.地域区分)}／{地域区分名(b.plan.state.地域区分)}）。
+          1単位の金額が変わるため、そのままでは正しく比較できません。同じ地域区分にそろえて保存し直してください。
+        </p>
+      )}
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11.5px] text-zinc-600 dark:text-zinc-400">
         <div>
