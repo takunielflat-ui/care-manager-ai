@@ -8,7 +8,7 @@
 
 import { 高額介護サービス費 } from "@/lib/kaigo/master";
 import { 計算, type 計算結果 } from "@/lib/kaigo/calc";
-import type { 条件, 行state } from "./state";
+import { 加算回数を求める, type 条件, type 行state } from "./state";
 
 export interface プラン内容 extends 条件 {
   /** 古い保存データにだけ入っていることがある。新しい保存には含めない */
@@ -38,6 +38,7 @@ export function プランを計算(state: プラン内容): 計算結果 {
       処遇改善区分: x.処遇改善区分,
       加算率上書き: x.加算率上書き,
       加算選択: x.加算選択 ?? null,
+      加算回数: 加算回数を求める(x),
       自費: x.自費,
     })),
   });
