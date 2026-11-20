@@ -102,7 +102,7 @@ export default function TanniHelpPage() {
         <section className="flex flex-col gap-2">
           <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">計算結果を保存・比較したい場合</h2>
           <p className="text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-            ログインすると、画面下の「💾 この計算を保存する」で利用者ごとに計算を残せます。保存した計算は
+            ログインすると、画面下の「💾 この計算を保存する」で利用者ごとに計算を残せます。保存した計算は、電卓の画面上の「📂 保存した計算を開く」か
             <Link href="/tools/tanni/plans" className="mx-1 text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
               保存した計算の一覧
             </Link>
