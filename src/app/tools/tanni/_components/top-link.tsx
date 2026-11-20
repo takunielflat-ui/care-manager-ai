@@ -6,14 +6,11 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 /**
- * 単位数電卓（公開ページ）から経過記録のトップへ戻るリンク。
- * ログインしている人にだけ出す。ログインしていない人が押すとログイン画面に飛び、
- * SNS・検索から来た人が迷うため。
- *
- * proxy.ts はこのページで認証を確認しないので、ブラウザに残っているセッションで判定する
+ * ブラウザに残っているセッションでログイン中かを判定する。
+ * proxy.ts は単位数電卓のページで認証を確認しないので、ここで見る
  * （getSession は Cookie を読むだけで、認証サーバーへの通信は発生しない）。
  */
-export default function TopLink({ className }: { className: string }) {
+function useLoggedIn(): boolean {
   const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
@@ -29,10 +26,34 @@ export default function TopLink({ className }: { className: string }) {
     };
   }, []);
 
+  return loggedIn;
+}
+
+/**
+ * 単位数電卓（公開ページ）から経過記録のトップへ戻るリンク。
+ * ログインしている人にだけ出す。ログインしていない人が押すとログイン画面に飛び、
+ * SNS・検索から来た人が迷うため。
+ */
+export default function TopLink({ className }: { className: string }) {
+  const loggedIn = useLoggedIn();
   if (!loggedIn) return null;
   return (
     <Link href="/" className={className}>
       ← トップ
+    </Link>
+  );
+}
+
+/**
+ * 「保存した計算」一覧へのボタン。保存はログインした人だけが使うので、ログイン中だけ出す。
+ * 画面下の小さな文字のリンクだけでは見つけにくい、という声を受けて画面上部に置く。
+ */
+export function SavedPlansLink({ className }: { className: string }) {
+  const loggedIn = useLoggedIn();
+  if (!loggedIn) return null;
+  return (
+    <Link href="/tools/tanni/plans" className={className}>
+      📂 保存した計算を開く
     </Link>
   );
 }

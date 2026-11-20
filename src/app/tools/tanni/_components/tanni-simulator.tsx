@@ -18,7 +18,7 @@ import SummarySheet from "./summary-sheet";
 import FamilyDialog from "./family-dialog";
 import PrintDialog from "./print-dialog";
 import JigyoshoDialog from "./jigyosho-dialog";
-import TopLink from "./top-link";
+import TopLink, { SavedPlansLink } from "./top-link";
 import SavePlanDialog, { type TanniPlanState } from "./save-plan-dialog";
 import { プランを計算 } from "./plan-calc";
 import {
@@ -244,6 +244,7 @@ export default function TanniSimulator() {
         </header>
 
         <main className="mx-auto w-full max-w-[640px] px-3.5 pt-3.5">
+          <SavedPlansLink className="mb-3 flex w-full items-center justify-center rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400" />
           <h2 className="mt-1 mb-2 px-1 text-xs font-bold tracking-wide text-zinc-500 dark:text-zinc-400">ご本人の条件</h2>
           <div className="mb-3 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
             <div className="mb-3">
