@@ -6,7 +6,8 @@
  *  ■計算の考え方（ここが実務上いちばん間違えやすい所）
  *
  *   1. 給付管理単位 = Σ(基本単位 × 月回数 + 加算単位 × 加算の回数)
- *        加算 = 入浴介助加算など（要介護のみ）。限度額の対象に含める。
+ *        加算 = 入浴介助加算・特定事業所加算など（要介護のみ）。限度額の対象に含める。
+ *        特定事業所加算は「基本単位 × ％」を1回ごとに四捨五入した単位を毎回足す。
  *        加算の回数は利用回数とは別に指定できる（毎回入浴するとは限らないため）。
  *        → 区分支給限度基準額と比べるのはこの数字。
  *
@@ -210,6 +211,12 @@ export function 回数加算を取得(row: 計算行, 要介護度: 要介護度
   for (const k of def.kasan) {
     const 区分 = row.加算選択[k.key];
     if (!区分 || k.options[区分] == null) continue;
+    // 特定事業所加算など「所定単位数 × ％」の加算は、1回ごとに四捨五入して毎回算定する
+    if (k.率) {
+      const 単位 = Math.round(単位数を取得(row, 要介護度) * (k.options[区分] / 100));
+      out.push({ key: k.key, label: k.label, 区分, 単位, 回数: 利用回数 });
+      continue;
+    }
     const 指定 = row.加算回数?.[k.key];
     const 回数 = 指定 == null ? 利用回数 : Math.max(0, Math.min(利用回数, Number(指定) || 0));
     out.push({ key: k.key, label: k.label, 区分, 単位: k.options[区分], 回数 });
@@ -406,7 +413,7 @@ export function 計算ステップ(r: 計算結果, 負担割合: number): { ste
   const 回の語 = (d: 明細行) => (サービス[d.service]?.freq === "per_day" ? "日" : "回");
   // 加算があれば内訳を見せる。毎回算定なら「(777＋入浴40)単位 × 9回」、
   // 回数が違えば「777単位 × 9回 ＋ 入浴40単位 × 4回」
-  const 加算名 = (k: 加算明細) => k.label.replace(/介助加算$/, "");
+  const 加算名 = (k: 加算明細) => k.label.replace(/(介助)?加算$/, "");
   const 回数の式 = (d: 明細行) => {
     const 語 = 回の語(d);
     if (!d.加算内訳.length) return `${d.基本単位.toLocaleString()}単位 × ${d.回数}${語}`;
