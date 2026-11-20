@@ -292,7 +292,7 @@ export default function ServiceRow({
             onChange={(e) => {
               const 区分 = e.target.value || null;
               // 初めて選んだときは「毎回」から始める
-              const 初回 = 区分 && row.加算回数?.[k.key] == null;
+              const 初回 = 区分 && !k.率 && row.加算回数?.[k.key] == null;
               onChange({
                 加算選択: { ...(row.加算選択 ?? {}), [k.key]: 区分 },
                 ...(初回
@@ -307,11 +307,15 @@ export default function ServiceRow({
             <option value="">算定なし</option>
             {Object.entries(k.options).map(([区分, 単位]) => (
               <option key={区分} value={区分}>
-                {区分}（1{unitWord} {単位}単位）
+                {k.率 ? `${区分}（基本単位の${単位}%）` : `${区分}（1${unitWord} ${単位}単位）`}
               </option>
             ))}
           </select>
-          {row.加算選択?.[k.key] ? (
+          {row.加算選択?.[k.key] && k.率 ? (
+            <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              1{unitWord}あたり +{加算明細.find((x) => x.key === k.key)?.単位 ?? 0}単位（毎回算定）
+            </div>
+          ) : row.加算選択?.[k.key] ? (
             <加算回数入力
               row={row}
               k={k.key}
