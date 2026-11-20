@@ -11,7 +11,7 @@ const ON_REQUEST = "請求があった場合には遅滞なく開示いたしま
 const ROWS: { label: string; value: string }[] = [
   { label: "販売事業者", value: ON_REQUEST },
   { label: "運営統括責任者", value: ON_REQUEST },
-  { label: "所在地", value: "【DMMバーチャルオフィスの住所】" },
+  { label: "所在地", value: "東京都港区北青山1-3-3　三橋ビル　3階" },
   { label: "電話番号", value: ON_REQUEST },
   { label: "メールアドレス", value: CONTACT_EMAIL },
   {
