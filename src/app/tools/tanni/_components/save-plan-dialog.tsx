@@ -18,6 +18,9 @@ export interface TanniPlanState extends 条件 {
 
 type PlanSummary = { id: string; title: string; updated_at: string };
 
+/** 電卓でいま開いている保存済みの計算（上書き保存の対象） */
+export type 開いている計算 = PlanSummary;
+
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-[15px] text-zinc-900 focus:outline-none focus:ring-2 focus:ring-teal-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
 
@@ -25,12 +28,19 @@ export default function SavePlanDialog({
   open,
   onClose,
   currentState,
+  openPlan,
   onLoad,
+  onSaved,
+  onDeleted,
 }: {
   open: boolean;
   onClose: () => void;
   currentState: TanniPlanState;
-  onLoad: (state: TanniPlanState) => void;
+  openPlan: 開いている計算 | null;
+  onLoad: (state: TanniPlanState, plan: 開いている計算) => void;
+  /** 保存（上書き・新規）できたとき。saved はそのとき保存した中身 */
+  onSaved: (plan: 開いている計算, saved: TanniPlanState) => void;
+  onDeleted: (id: string) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -55,18 +65,33 @@ export default function SavePlanDialog({
       </div>
 
       {/* 開くたびに再マウントさせ、認証確認とプラン一覧取得をやり直す */}
-      {open && <SavePlanDialogBody currentState={currentState} onLoad={onLoad} onClose={onClose} />}
+      {open && (
+        <SavePlanDialogBody
+          currentState={currentState}
+          openPlan={openPlan}
+          onLoad={onLoad}
+          onSaved={onSaved}
+          onDeleted={onDeleted}
+          onClose={onClose}
+        />
+      )}
     </dialog>
   );
 }
 
 function SavePlanDialogBody({
   currentState,
+  openPlan,
   onLoad,
+  onSaved,
+  onDeleted,
   onClose,
 }: {
   currentState: TanniPlanState;
-  onLoad: (state: TanniPlanState) => void;
+  openPlan: 開いている計算 | null;
+  onLoad: (state: TanniPlanState, plan: 開いている計算) => void;
+  onSaved: (plan: 開いている計算, saved: TanniPlanState) => void;
+  onDeleted: (id: string) => void;
   onClose: () => void;
 }) {
   const [authState, setAuthState] = useState<"checking" | "in" | "out" | "error">("checking");
@@ -138,6 +163,36 @@ function SavePlanDialogBody({
         return;
       }
       setPlans((cur) => [data.plan!, ...cur]);
+      // 新しく保存したら、以後はその計算を開いている扱いにする（次からは上書きできる）
+      onSaved(data.plan, currentState);
+      onClose();
+    } catch {
+      setErrorMessage("通信に失敗しました。もう一度お試しください。");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOverwrite = async () => {
+    if (saving || !openPlan) return;
+    setSaving(true);
+    setErrorMessage("");
+    try {
+      // 印刷名（利用者の実名）は送らない
+      const { 印刷名: _除外, ...state } = currentState;
+      void _除外;
+      const res = await fetch(`/api/tanni-plans/${openPlan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state }),
+      });
+      const data: { plan?: PlanSummary; error?: string } = await res.json().catch(() => ({}));
+      if (!res.ok || !data.plan) {
+        setErrorMessage(data.error ?? "上書き保存に失敗しました。");
+        return;
+      }
+      onSaved(data.plan, currentState);
+      onClose();
     } catch {
       setErrorMessage("通信に失敗しました。もう一度お試しください。");
     } finally {
@@ -151,12 +206,15 @@ function SavePlanDialogBody({
     setErrorMessage("");
     try {
       const res = await fetch(`/api/tanni-plans/${id}`);
-      const data: { plan?: { state: TanniPlanState }; error?: string } = await res.json().catch(() => ({}));
+      const data: { plan?: PlanSummary & { state: TanniPlanState }; error?: string } = await res
+        .json()
+        .catch(() => ({}));
       if (!res.ok || !data.plan) {
         setErrorMessage(data.error ?? "読み込みに失敗しました。");
         return;
       }
-      onLoad(data.plan.state);
+      const { state, ...meta } = data.plan;
+      onLoad(state, meta);
       onClose();
     } catch {
       setErrorMessage("通信に失敗しました。もう一度お試しください。");
@@ -175,6 +233,7 @@ function SavePlanDialogBody({
     try {
       const res = await fetch(`/api/tanni-plans/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("delete failed");
+      onDeleted(id);
     } catch {
       setPlans(previous);
       setErrorMessage("削除に失敗しました。もう一度お試しください。");
@@ -209,7 +268,28 @@ function SavePlanDialogBody({
 
       {authState === "in" && (
         <>
+          {openPlan && (
+            <div className="mb-3 rounded-xl border-[1.5px] border-teal-700 bg-white p-3.5 dark:bg-zinc-950">
+              <div className="text-xs font-bold text-zinc-500 dark:text-zinc-400">いま開いている計算</div>
+              <div className="mt-0.5 truncate font-bold">{openPlan.title}</div>
+              <button
+                type="button"
+                onClick={handleOverwrite}
+                disabled={saving}
+                className="mt-2.5 w-full rounded-xl bg-teal-700 py-3 text-[14px] font-bold text-white disabled:opacity-50"
+              >
+                {saving ? "保存中…" : "💾 上書き保存"}
+              </button>
+              <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                「{openPlan.title}」を今の内容で置き換えます。元の内容も残したいときは、下の「別の名前で保存」を使ってください。
+              </div>
+            </div>
+          )}
+
           <div className="mb-3 rounded-xl border border-zinc-200 bg-white p-3.5 dark:border-zinc-800 dark:bg-zinc-950">
+            {openPlan && (
+              <div className="mb-2 text-[13px] font-bold text-zinc-700 dark:text-zinc-300">別の名前で保存</div>
+            )}
             <label className="mb-1.5 block text-xs font-bold text-zinc-500 dark:text-zinc-400">
               プラン名（実名は入れないでください）
             </label>
@@ -223,12 +303,16 @@ function SavePlanDialogBody({
               type="button"
               onClick={handleSave}
               disabled={saving || title.trim() === ""}
-              className="mt-2.5 w-full rounded-xl bg-teal-700 py-3 text-[14px] font-bold text-white disabled:opacity-50"
+              className={`mt-2.5 w-full rounded-xl py-3 text-[14px] font-bold disabled:opacity-50 ${
+                openPlan
+                  ? "border-[1.5px] border-teal-700 bg-white text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
+                  : "bg-teal-700 text-white"
+              }`}
             >
-              {saving ? "保存中…" : "この内容を新しく保存"}
+              {saving ? "保存中…" : openPlan ? "別の計算として新しく保存" : "この内容を新しく保存"}
             </button>
             <div className="mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-              保存するたびに新しいプランとして追加されます。プランA/Bの比較にご利用ください。
+              新しいプランとして追加されます。プランA/Bの比較にご利用ください。
               <br />
               プラン名はサーバーに保存されるため、利用者のお名前は入れず、事業所内の番号やイニシャルなどで区別してください。PDFに印字するお名前は保存されません（印刷のたびにこの端末で入力します）。
             </div>
@@ -262,6 +346,11 @@ function SavePlanDialogBody({
                 className="mb-2 flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
               >
                 <div className="min-w-0 flex-1">
+                  {openPlan?.id === p.id && (
+                    <span className="mb-0.5 inline-block rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-bold text-white">
+                      いま開いている
+                    </span>
+                  )}
                   <div className="truncate font-bold">{p.title}</div>
                   <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     {new Date(p.updated_at).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" })}

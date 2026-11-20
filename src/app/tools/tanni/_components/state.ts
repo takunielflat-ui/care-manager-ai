@@ -293,3 +293,9 @@ export function uid(): string {
 }
 
 export const 要介護度候補 = 要介護度一覧;
+
+/* ---------------- 最後に開いた・保存した計算（一覧で目印をつけるため） ----------------
+ * 端末ごとの目印なので localStorage に置く。消えても目印が出ないだけで困らない。 */
+const STORAGE_LAST_PLAN = "tanni:lastPlanId";
+export const 最後の計算IDを読む = (): string | null => loadLocal<string | null>(STORAGE_LAST_PLAN, null);
+export const 最後の計算IDを残す = (id: string | null): void => saveLocal(STORAGE_LAST_PLAN, id);

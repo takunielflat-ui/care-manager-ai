@@ -106,7 +106,7 @@ export default function TanniHelpPage() {
             <Link href="/tools/tanni/plans" className="mx-1 text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
               保存した計算の一覧
             </Link>
-            ページで見直したり、2件を並べて比較したりできます。保存・閲覧には
+            ページで見直したり、2件を並べて比較したりできます。保存した計算を開くと、電卓の上に「📂 開いている計算」と名前が出ます。直したあとは「💾 この計算を保存する」から「上書き保存」で同じ計算を更新できます（元の内容も残したいときは「別の名前で保存」）。保存・閲覧には
             <Link href="/login" className="mx-1 text-teal-700 underline-offset-2 hover:underline dark:text-teal-400">
               無料登録
             </Link>
