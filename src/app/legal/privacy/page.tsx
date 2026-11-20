@@ -82,7 +82,7 @@ export default function PrivacyPage() {
       <h2>10. 改定</h2>
       <p>本ポリシーを変更する場合は、本サービス上でお知らせします。</p>
 
-      <p className="mt-8">制定：2026年11月【日】</p>
+      <p className="mt-8">制定：2026年12月</p>
     </>
   );
 }
