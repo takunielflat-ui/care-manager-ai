@@ -48,11 +48,24 @@ export default function TopLink({ className }: { className: string }) {
  * 「保存した計算」一覧へのボタン。保存はログインした人だけが使うので、ログイン中だけ出す。
  * 画面下の小さな文字のリンクだけでは見つけにくい、という声を受けて画面上部に置く。
  */
-export function SavedPlansLink({ className }: { className: string }) {
+export function SavedPlansLink({
+  className,
+  confirmMessage,
+}: {
+  className: string;
+  /** 指定があれば、移る前に確認する（保存していない変更があるときなど） */
+  confirmMessage?: string | null;
+}) {
   const loggedIn = useLoggedIn();
   if (!loggedIn) return null;
   return (
-    <Link href="/tools/tanni/plans" className={className}>
+    <Link
+      href="/tools/tanni/plans"
+      className={className}
+      onClick={(e) => {
+        if (confirmMessage && !confirm(confirmMessage)) e.preventDefault();
+      }}
+    >
       📂 保存した計算を開く
     </Link>
   );

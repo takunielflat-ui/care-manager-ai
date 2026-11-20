@@ -19,7 +19,7 @@ import FamilyDialog from "./family-dialog";
 import PrintDialog from "./print-dialog";
 import JigyoshoDialog from "./jigyosho-dialog";
 import TopLink, { SavedPlansLink } from "./top-link";
-import SavePlanDialog, { type TanniPlanState } from "./save-plan-dialog";
+import SavePlanDialog, { type TanniPlanState, type 開いている計算 } from "./save-plan-dialog";
 import { プランを計算 } from "./plan-calc";
 import {
   applyJigyosho,
@@ -29,6 +29,7 @@ import {
   saveCond,
   saveJigyosho,
   uid,
+  最後の計算IDを残す,
   要介護度に合わせて行を直す,
   type AppState,
   type 事業所,
@@ -60,6 +61,23 @@ function 初期状態を作る(): AppState {
 }
 
 const noopSubscribe = () => () => {};
+
+/** サーバーに保存する中身。上書き保存と「変更があるか」の判定の両方で同じものを使う */
+function 保存する中身(s: TanniPlanState): TanniPlanState {
+  return {
+    要介護度: s.要介護度,
+    地域区分: s.地域区分,
+    負担割合: s.負担割合,
+    高額区分: s.高額区分,
+    負担限度額段階: s.負担限度額段階,
+    印刷作成者: s.印刷作成者,
+    超過割当: s.超過割当 ?? null,
+    rows: s.rows,
+  };
+}
+const 比べる形 = (p: TanniPlanState) => JSON.stringify(保存する中身(p));
+
+const 日時 = (iso: string) => new Date(iso).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" });
 
 export default function TanniSimulator() {
   const [state, setState] = useState<AppState>(初期状態を作る);
@@ -131,9 +149,25 @@ export default function TanniSimulator() {
       ...s,
       rows: s.rows.map((r) => (r.id === id ? applyJigyosho(r, s.jigyosho, jid || null) : r)),
     }));
-  const clearAllRows = () => setState((s) => ({ ...s, rows: [] }));
+  // 「全部消す」は新しく作り直す操作なので、開いている計算からも離れる（上書きの事故を防ぐ）
+  const clearAllRows = () => {
+    setState((s) => ({ ...s, rows: [] }));
+    setOpenPlan(null);
+  };
 
-  const loadPlan = (plan: TanniPlanState) =>
+  // いま開いている保存済みの計算と、そのとき保存されていた中身（変更があるかの判定用）
+  const [openPlan, setOpenPlan] = useState<(開いている計算 & { 保存時: string }) | null>(null);
+  const 今の中身 = 保存する中身(state);
+  const 未保存の変更あり = openPlan != null && 比べる形(今の中身) !== openPlan.保存時;
+
+  const 開いた計算を覚える = (meta: 開いている計算, 中身: TanniPlanState) => {
+    setOpenPlan({ id: meta.id, title: meta.title, updated_at: meta.updated_at, 保存時: 比べる形(中身) });
+    最後の計算IDを残す(meta.id);
+  };
+
+  const loadPlan = (plan: TanniPlanState, meta: 開いている計算) => {
+    // 読み込んだ直後の画面と同じ形で覚えておく（古い区分名の読み替え後）
+    開いた計算を覚える(meta, { ...plan, 超過割当: plan.超過割当 ?? null, rows: 要介護度に合わせて行を直す(plan.rows, plan.要介護度) });
     setState((s) => {
       const next = {
         ...s,
@@ -153,6 +187,7 @@ export default function TanniSimulator() {
       saveCond(next);
       return next;
     });
+  };
 
   // 「保存した計算」一覧から ?plan=<id> 付きで開かれたら、その保存を読み込む。
   // 読み込んだらURLからパラメータを外し、再読み込みで二重取得しないようにする。
@@ -163,8 +198,11 @@ export default function TanniSimulator() {
     (async () => {
       try {
         const res = await fetch(`/api/tanni-plans/${id}`);
-        const data: { plan?: { state: TanniPlanState } } = await res.json().catch(() => ({}));
-        if (!cancelled && res.ok && data.plan?.state) loadPlan(data.plan.state);
+        const data: { plan?: 開いている計算 & { state: TanniPlanState } } = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && data.plan?.state) {
+          const { state: 中身, ...meta } = data.plan;
+          loadPlan(中身, meta);
+        }
       } catch {
         // 読み込めなくても電卓は通常どおり使えるので、何もしない
       } finally {
@@ -174,7 +212,8 @@ export default function TanniSimulator() {
     return () => {
       cancelled = true;
     };
-    // マウント時に1回だけ実行する
+    // マウント時に1回だけ実行する（loadPlan は毎回作り直されるので依存に入れない）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openJigyoshoDialog = () => setJigyoshoOpen(true);
@@ -244,7 +283,32 @@ export default function TanniSimulator() {
         </header>
 
         <main className="mx-auto w-full max-w-[640px] px-3.5 pt-3.5">
-          <SavedPlansLink className="mb-3 flex w-full items-center justify-center rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400" />
+          <SavedPlansLink
+            confirmMessage={未保存の変更あり ? "まだ保存していない変更があります。このまま一覧に移ると、変更は消えます。移りますか？" : null}
+            className="mb-3 flex w-full items-center justify-center rounded-xl border-[1.5px] border-teal-700 bg-white py-3 text-[14px] font-bold text-teal-700 dark:bg-zinc-950 dark:text-teal-400"
+          />
+          {openPlan && (
+            <div
+              className={`mb-3 rounded-xl border-[1.5px] p-3 ${
+                未保存の変更あり
+                  ? "border-amber-500 bg-amber-50 dark:border-amber-600 dark:bg-amber-950"
+                  : "border-teal-700 bg-teal-50 dark:bg-teal-950"
+              }`}
+            >
+              <div className="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">📂 開いている計算</div>
+              <div className="truncate text-[15px] font-bold text-zinc-900 dark:text-zinc-50">{openPlan.title}</div>
+              <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{日時(openPlan.updated_at)} 保存</div>
+              <div
+                className={`mt-1.5 text-[13px] font-bold ${
+                  未保存の変更あり ? "text-amber-800 dark:text-amber-300" : "text-teal-700 dark:text-teal-400"
+                }`}
+              >
+                {未保存の変更あり
+                  ? "⚠ まだ保存していない変更があります（画面下の「💾 この計算を保存する」から上書きできます）"
+                  : "✓ 保存した内容のままです"}
+              </div>
+            </div>
+          )}
           <h2 className="mt-1 mb-2 px-1 text-xs font-bold tracking-wide text-zinc-500 dark:text-zinc-400">ご本人の条件</h2>
           <div className="mb-3 rounded-xl border border-zinc-200 bg-white p-3.5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
             <div className="mb-3">
@@ -439,17 +503,11 @@ export default function TanniSimulator() {
       <SavePlanDialog
         open={saveOpen}
         onClose={() => setSaveOpen(false)}
-        currentState={{
-          要介護度: state.要介護度,
-          地域区分: state.地域区分,
-          負担割合: state.負担割合,
-          高額区分: state.高額区分,
-          負担限度額段階: state.負担限度額段階,
-          印刷作成者: state.印刷作成者,
-          超過割当: state.超過割当,
-          rows: state.rows,
-        }}
+        currentState={今の中身}
+        openPlan={openPlan}
         onLoad={loadPlan}
+        onSaved={開いた計算を覚える}
+        onDeleted={(id) => setOpenPlan((p) => (p?.id === id ? null : p))}
       />
     </div>
   );

@@ -8,6 +8,7 @@ import { 円, type 計算結果 } from "@/lib/kaigo/calc";
 import { 地域区分 } from "@/lib/kaigo/master";
 import { プランを計算, type プラン内容 } from "./plan-calc";
 import { GaugeBar } from "./gauge";
+import { 最後の計算IDを読む } from "./state";
 
 type SavedPlan = { id: string; title: string; state: プラン内容; updated_at: string };
 type Computed = { plan: SavedPlan; r: 計算結果 | null };
@@ -35,6 +36,8 @@ export default function TanniPlansView() {
 
   const [compareMode, setCompareMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // 電卓で最後に開いた・保存した計算（この端末だけの目印）。一覧はブラウザでだけ描くので初期値で読んでよい
+  const [最後の計算ID] = useState<string | null>(最後の計算IDを読む);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,6 +202,11 @@ export default function TanniPlansView() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
+                      {plan.id === 最後の計算ID && (
+                        <span className="mb-1 inline-block rounded-full bg-teal-700 px-2 py-0.5 text-[11px] font-bold text-white">
+                          🕘 さっきまで電卓で開いていた計算
+                        </span>
+                      )}
                       <div className="truncate font-bold text-zinc-900 dark:text-zinc-50">{plan.title}</div>
                       <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                         {new Date(plan.updated_at).toLocaleString("ja-JP", { dateStyle: "short", timeStyle: "short" })}

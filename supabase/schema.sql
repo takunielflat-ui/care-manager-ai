@@ -372,3 +372,11 @@ select cron.schedule(
 );
 
 select jobname, schedule, active from cron.job where jobname = 'purge-deleted-assessments';
+
+-- care-manager-ai: tanni_plans の上書き保存（2026-11-20 追加）
+-- 単位数シミュレーターで、開いている計算を「上書き保存」できるようにする。
+-- 自分の計算だけ更新できる。この部分だけを Supabase の SQL Editor で実行する。
+create policy "update own tanni_plans"
+  on public.tanni_plans for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
